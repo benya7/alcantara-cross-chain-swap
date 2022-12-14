@@ -1,5 +1,4 @@
 import { Chain } from "wagmi";
-//import localChains from "../config/localChains.json";
 
 export interface AxelarChain {
   name: string;
