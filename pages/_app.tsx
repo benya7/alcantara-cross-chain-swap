@@ -15,7 +15,7 @@ function App({ Component, pageProps }: AppProps) {
   return (
     <WagmiConfig client={client}>
       <NextHead>
-        <title>wagmi</title>
+        <title>Alcantara - Cross Chain Swap</title>
       </NextHead>
       <Layout>
         <NotificationProvider> 
