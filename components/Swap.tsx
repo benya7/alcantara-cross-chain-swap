@@ -213,7 +213,7 @@ export default function Swap() {
                     {toToken?.symbol}
                   </span> 
                 </div> 
-                {(!(steps['bridge'].state === 'failed') && steps['swapAfterBridge'].state === 'loading') && <Spinner className="animate-spin mt-2 m-auto h-5 w-5 text-white" />}
+                {!(steps['swapBeforeBridge'].state === 'failed') && (!(steps['bridge'].state === 'failed') && steps['swapAfterBridge'].state === 'loading') && <Spinner className="animate-spin mt-2 m-auto h-5 w-5 text-white" />}
                 {steps['swapAfterBridge'].state === 'completed' && <HiOutlineCheckCircle className="m-auto mt-2 h-6 w-6 text-green-600" />}
                 {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed' || steps['swapAfterBridge'].state === 'failed') && <HiOutlineXCircle className="m-auto mt-2 h-6 w-6 text-red-600" />}
               </div>
