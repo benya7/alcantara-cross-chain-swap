@@ -16,7 +16,6 @@ import { AxelarChain, chainsDetailsData } from "../config/chains";
 import { ActionMeta, SelectInstance, SingleValue } from "react-select";
 import { BaseToken, baseTokens } from "../config/tokens";
 import useList from "../hooks/useList";
-import getWrapedNativeSymbol from "../utils/getWrapedNativeSymbol";
 import { useApiService } from "./ApiService";
 import { formatUnits, parseUnits } from "ethers/lib/utils.js";
 import { useModal } from "../hooks/useModal";
@@ -30,6 +29,8 @@ import { useNotification } from "./Notification";
 import getGasCost from "../utils/getGasCost";
 import getNativeTokenId from "../utils/getNativeTokenId";
 import formatDecimals from "../utils/formatDecimals";
+import { AxelarAssetTransfer, AxelarQueryAPI, CHAINS, Environment } from "@axelar-network/axelarjs-sdk";
+import getNativeSymbol from "../utils/getNativeSymbol";
 
 interface SwapContextInterface {
   chains: AxelarChain[];
@@ -278,7 +279,7 @@ const SwapProvider = ({ children }: Props) => {
 
   useEffect(() => {
     if (!sourceChain) return;
-    const wrapedNative = getWrapedNativeSymbol(sourceChain.name.toLocaleLowerCase())
+    const wrapedNative = getNativeSymbol(sourceChain.name.toLocaleLowerCase())
     clearFromTokensList();
     const chainName = sourceChain.name.toLowerCase()
     const fromTokens = baseTokens[chainName];
@@ -578,50 +579,110 @@ const SwapProvider = ({ children }: Props) => {
   }, [sourceChain, destinationChain, fromTokenAmountAfterBridge, address, toToken, slippage])
 
   const bridge = useCallback(async () => {
+    if (!fromToken) return;
     let currentStep = 'bridge';
     try {
-      const allowance = (await readContract({
-        address: tokenBridgeSource.address,
-        abi: ERC20.abi,
-        functionName: 'allowance',
-        args: [address, sourceChain.gateway]
-      })) as BigNumber
+      const axelarAssetTransfer = new AxelarAssetTransfer({
+        environment: Environment.MAINNET,
+      });
+      CHAINS
+      const depositAddress = await axelarAssetTransfer.getDepositAddress(
+        sourceChain.name, // source chain
+        destinationChain.name, // destination chain
+        address, // destination address
+        "uusdc" // denom of asset. See note (2) below
+      );
 
-      if (allowance.lt(fromTokenAmountAfterBridge)) {
-        const configApproveGateway = await prepareWriteContract({
-          address: tokenBridgeSource.address,
-          abi: ERC20.abi,
-          functionName: 'approve',
-          args: [
-            sourceChain.gateway,
-            fromTokenAmountAfterBridge,
-          ],
-        });
-        currentStep = 'approve gateway contract'
-        const txApprove = await writeContract(configApproveGateway);
-        await txApprove.wait()
-        console.log('approve gateway hash', txApprove.hash)
-      }
+      console.log(depositAddress)
+    //   const allowance = (await readContract({
+    //     address: tokenBridgeSource.address,
+    //     abi: ERC20.abi,
+    //     functionName: 'allowance',
+    //     args: [address, sourceChain.gateway]
+    //   })) as BigNumber
 
-      const configCallGateway = await prepareWriteContract({
-        address: sourceChain.gateway,
-        abi: AxelarGateway.abi,
-        functionName: 'sendToken',
-        args: [
-          destinationChain.name,
-          address,
-          tokenBridgeSource.symbol,
-          fromTokenAmountAfterBridge
-        ]
-      })
-      currentStep = 'send token from gateway contract'
-      const txBridge = await writeContract(configCallGateway);
-      await txBridge.wait()
-      console.log('bridge bridge hash', txBridge.hash)
+    //   if (allowance.lt(fromTokenAmountAfterBridge)) {
+    //     const configApproveGateway = await prepareWriteContract({
+    //       address: tokenBridgeSource.address,
+    //       abi: ERC20.abi,
+    //       functionName: 'approve',
+    //       args: [
+    //         sourceChain.gateway,
+    //         fromTokenAmountAfterBridge,
+    //       ],
+    //     });
+    //     currentStep = 'approve gateway contract'
+    //     const txApprove = await writeContract(configApproveGateway);
+    //     await txApprove.wait()
+    //     console.log('approve gateway hash', txApprove.hash)
+    //   }
+
+    //   const configCallGateway = await prepareWriteContract({
+    //     address: sourceChain.gateway,
+    //     abi: AxelarGateway.abi,
+    //     functionName: 'sendToken',
+    //     args: [
+    //       destinationChain.name,
+    //       address,
+    //       tokenBridgeSource.symbol,
+    //       fromTokenAmountAfterBridge
+    //     ]
+    //   })
+    //   currentStep = 'send token from gateway contract'
+    //   const txBridge = await writeContract(configCallGateway);
+    //   await txBridge.wait()
+    //   console.log('bridge bridge hash', txBridge.hash)
     } catch (err: any) {
       throw new Error<{ reason: string; step: string }>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
   }, [sourceChain, destinationChain, tokenBridgeSource, fromTokenAmountAfterBridge, address])
+
+
+  // const bridge = useCallback(async () => {
+  //   let currentStep = 'bridge';
+  //   try {
+  //     const allowance = (await readContract({
+  //       address: tokenBridgeSource.address,
+  //       abi: ERC20.abi,
+  //       functionName: 'allowance',
+  //       args: [address, sourceChain.gateway]
+  //     })) as BigNumber
+
+  //     if (allowance.lt(fromTokenAmountAfterBridge)) {
+  //       const configApproveGateway = await prepareWriteContract({
+  //         address: tokenBridgeSource.address,
+  //         abi: ERC20.abi,
+  //         functionName: 'approve',
+  //         args: [
+  //           sourceChain.gateway,
+  //           fromTokenAmountAfterBridge,
+  //         ],
+  //       });
+  //       currentStep = 'approve gateway contract'
+  //       const txApprove = await writeContract(configApproveGateway);
+  //       await txApprove.wait()
+  //       console.log('approve gateway hash', txApprove.hash)
+  //     }
+
+  //     const configCallGateway = await prepareWriteContract({
+  //       address: sourceChain.gateway,
+  //       abi: AxelarGateway.abi,
+  //       functionName: 'sendToken',
+  //       args: [
+  //         destinationChain.name,
+  //         address,
+  //         tokenBridgeSource.symbol,
+  //         fromTokenAmountAfterBridge
+  //       ]
+  //     })
+  //     currentStep = 'send token from gateway contract'
+  //     const txBridge = await writeContract(configCallGateway);
+  //     await txBridge.wait()
+  //     console.log('bridge bridge hash', txBridge.hash)
+  //   } catch (err: any) {
+  //     throw new Error<{ reason: string; step: string }>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
+  //   }
+  // }, [sourceChain, destinationChain, tokenBridgeSource, fromTokenAmountAfterBridge, address])
 
   const bridgeAndSwap = useCallback(async () => {
     showModalTransaction()
