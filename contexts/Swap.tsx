@@ -18,17 +18,15 @@ import { BaseToken, baseTokens } from "../config/tokens";
 import useList from "../hooks/useList";
 import getWrapedNativeSymbol from "../utils/getWrapedNativeSymbol";
 import { useApiService } from "./ApiService";
-import { formatEther, formatUnits, parseUnits } from "ethers/lib/utils.js";
+import { formatUnits, parseUnits } from "ethers/lib/utils.js";
 import { useModal } from "../hooks/useModal";
 import paginateTokensList from "../utils/paginateTokensList";
 import ERC20 from '../contracts/interfaces/IERC20.sol/IERC20.json';
 import AxelarGateway from '../contracts/interfaces/IAxelarGateway.sol/IAxelarGateway.json';
 import { BigNumber, constants } from "ethers";
-import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData, fetchBalance } from "@wagmi/core";
+import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData, fetchBalance, readContract } from "@wagmi/core";
 import Error from "next/error";
-import { useNotification, Notification } from "./Notification";
-import sleep from "../utils/sleep";
-import { removeAllListeners, removeListener } from "process";
+import { useNotification } from "./Notification";
 import getGasCost from "../utils/getGasCost";
 import getNativeTokenId from "../utils/getNativeTokenId";
 import formatDecimals from "../utils/formatDecimals";
@@ -582,19 +580,28 @@ const SwapProvider = ({ children }: Props) => {
   const bridge = useCallback(async () => {
     let currentStep = 'bridge';
     try {
-      const configApproveGateway = await prepareWriteContract({
+      const allowance = (await readContract({
         address: tokenBridgeSource.address,
         abi: ERC20.abi,
-        functionName: 'approve',
-        args: [
-          sourceChain.gateway,
-          fromTokenAmountAfterBridge,
-        ],
-      });
-      currentStep = 'approve gateway contract'
-      const txApprove = await writeContract(configApproveGateway);
-      await txApprove.wait()
-      console.log('approve gateway hash', txApprove.hash)
+        functionName: 'allowance',
+        args: [address, sourceChain.gateway]
+      })) as BigNumber
+
+      if (allowance.lt(fromTokenAmountAfterBridge)) {
+        const configApproveGateway = await prepareWriteContract({
+          address: tokenBridgeSource.address,
+          abi: ERC20.abi,
+          functionName: 'approve',
+          args: [
+            sourceChain.gateway,
+            fromTokenAmountAfterBridge,
+          ],
+        });
+        currentStep = 'approve gateway contract'
+        const txApprove = await writeContract(configApproveGateway);
+        await txApprove.wait()
+        console.log('approve gateway hash', txApprove.hash)
+      }
 
       const configCallGateway = await prepareWriteContract({
         address: sourceChain.gateway,
@@ -606,6 +613,9 @@ const SwapProvider = ({ children }: Props) => {
           tokenBridgeSource.symbol,
           fromTokenAmountAfterBridge
         ],
+        overrides: {
+          gasLimit: BigNumber.from(70000)
+        }
       })
       currentStep = 'send token from gateway contract'
       const txBridge = await writeContract(configCallGateway);
@@ -614,7 +624,7 @@ const SwapProvider = ({ children }: Props) => {
     } catch (err: any) {
       throw new Error<{ reason: string; step: string }>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
-  }, [sourceChain, tokenBridgeSource, fromTokenAmountAfterBridge])
+  }, [sourceChain, destinationChain, tokenBridgeSource, fromTokenAmountAfterBridge, address])
 
   const bridgeAndSwap = useCallback(async () => {
     showModalTransaction()
@@ -669,7 +679,7 @@ const SwapProvider = ({ children }: Props) => {
       readySwap,
       steps,
       fullGasCostInUsd,
-      insufficientBalance
+      insufficientBalance,
     }}>
       {children}
     </SwapContext.Provider>
