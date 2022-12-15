@@ -332,8 +332,13 @@ const SwapProvider = ({ children }: Props) => {
   const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
     const nativeTokenId = getNativeTokenId(chainId.toString());
     const { gasPrice } = await fetchFeeData({ chainId: chainId });
-    const nativeTokenPrice = await apiService.getNativeTokenPrice({ ids: nativeTokenId, vs_currencies: 'usd' })
-    return getGasCost(gasLimit, gasPrice ?? BigNumber.from(formatUnits(20, 'gwei')), nativeTokenPrice[nativeTokenId]['usd'])
+    let nativeTokenPrice = '0';
+    try {
+      nativeTokenPrice = (await apiService.getNativeTokenPrice({ ids: nativeTokenId, vs_currencies: 'usd' }))[nativeTokenId]['usd']
+    } catch (error) {
+      console.log('call coingecko api fail')
+    }
+    return getGasCost(gasLimit, gasPrice ?? BigNumber.from(formatUnits(20, 'gwei')), nativeTokenPrice)
 
   }, [apiService])
 
