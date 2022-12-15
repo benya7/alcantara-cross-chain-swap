@@ -103,7 +103,7 @@ const SwapProvider = ({ children }: Props) => {
   const [destinationChain, setDestinationChain] = useState<AxelarChain>(chainsDetailsData['polygon']);
   const [fromToken, setFromToken] = useState<BaseToken>();
   const [toToken, setToToken] = useState<BaseToken>();
-  const { switchNetwork, error: errorSwitchNetwork, isLoading: isLoadingSwitchNetwork } = useSwitchNetwork();
+  const { switchNetwork, switchNetworkAsync, error: errorSwitchNetwork, isLoading: isLoadingSwitchNetwork } = useSwitchNetwork();
   const { list: fromTokensList, addItem: addFromTokenToList, clear: clearFromTokensList, setList: setFromTokensList } = useList<BaseToken>();
   const { list: toTokensList, addItem: addToTokenToList, clear: clearToTokensList, setList: setToTokensList } = useList<BaseToken>();
   const [slippage, setSlippage] = useState("0.5");
@@ -319,15 +319,15 @@ const SwapProvider = ({ children }: Props) => {
     setNotification({ title: 'Switch Network', description: errorSwitchNetwork.message, type: 'error' });
   }, [errorSwitchNetwork])
 
- const fetchFromTokenBalance = useCallback(async () => {
-  if (!address || !fromToken) return;
-  return fetchBalance({
-    address,
-    token: fromToken.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? fromToken.address as `0x${string}` : undefined,
-    chainId: sourceChain.chainId
+  const fetchFromTokenBalance = useCallback(async () => {
+    if (!address || !fromToken) return;
+    return fetchBalance({
+      address,
+      token: fromToken.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? fromToken.address as `0x${string}` : undefined,
+      chainId: sourceChain.chainId
 
-  })
- },[fromToken, sourceChain, address]);
+    })
+  }, [fromToken, sourceChain, address]);
 
   const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
     const nativeTokenId = getNativeTokenId(chainId.toString());
@@ -338,7 +338,7 @@ const SwapProvider = ({ children }: Props) => {
   }, [apiService])
 
   const getQuote = useCallback(async () => {
-    if (!fromToken || !toToken || !fromTokenAmount || !(parseFloat(fromTokenAmount) > 0 ) || isLoadingSwitchNetwork || sourceChain === destinationChain) {
+    if (!fromToken || !toToken || !fromTokenAmount || !(parseFloat(fromTokenAmount) > 0) || isLoadingSwitchNetwork || sourceChain === destinationChain) {
       setToTokenAmount('')
       setFullGasCostInUsd({ value: 0, state: 'fetching' });
       return;
@@ -357,7 +357,7 @@ const SwapProvider = ({ children }: Props) => {
                 setToTokenAmount(formatDecimals(formatUnits(res2.toTokenAmount, res2.toToken.decimals)))
               })
               .catch((err: any) => {
-                setNotification({ title: 'getQuote', description: err.data?.reason ??  err.data?.description ?? null, type: 'error' })
+                setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
                 setToTokenAmount('')
               })
           } else {
@@ -367,7 +367,7 @@ const SwapProvider = ({ children }: Props) => {
           }
         })
         .catch((err: any) => {
-          setNotification({ title: 'getQuote', description: err.data?.reason ??  err.data?.description ?? null, type: 'error' })
+          setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
           setToTokenAmount('')
         })
 
@@ -382,7 +382,7 @@ const SwapProvider = ({ children }: Props) => {
             setToTokenAmount(formatDecimals(formatUnits(res.toTokenAmount, res.toToken.decimals)))
           })
           .catch((err: any) => {
-            setNotification({ title: 'getQuote', description: err.data?.reason ??  err.data?.description ?? null, type: 'error' })
+            setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
             setToTokenAmount('')
           })
       } else {
@@ -408,12 +408,12 @@ const SwapProvider = ({ children }: Props) => {
       setFromTokenBalance(res?.value ?? BigNumber.from('0'))
     })
   }, [fetchFromTokenBalance])
-  
+
   const insufficientBalance = useMemo(() => {
     if (!fromToken || fromTokenAmount === '') return false;
     return fromTokenBalance.lt(parseUnits(fromTokenAmount, fromToken.decimals))
 
-  },[fromTokenAmount, fromTokenBalance, fromToken])
+  }, [fromTokenAmount, fromTokenBalance, fromToken])
 
   useEffect(() => {
     getQuote()
@@ -457,7 +457,7 @@ const SwapProvider = ({ children }: Props) => {
     const parsedAmount = parseUnits(amount, token.decimals).toNumber();
     const { allowance } = await apiService.getAllowance(chainId, { tokenAddress: token.address, address: address as string })
     return parsedAmount > allowance;
-    
+
   }, [address, apiService]);
 
   const getApproveCallData = async (chainId: number, token: BaseToken, amount: string) => {
@@ -525,14 +525,19 @@ const SwapProvider = ({ children }: Props) => {
   }, [sourceChain, fromToken, fromTokenAmount, address, slippage, tokenBridgeSource])
 
   const swapAfterBridge = useCallback(async () => {
-    if (!sourceChain || !fromTokenAmountAfterBridge || !address || !toToken || !destinationChain || !switchNetwork) throw new Error<{ reason: string }>({ reason: 'missing params', statusCode: 1 });
+    if (!sourceChain || !fromTokenAmountAfterBridge || !address || !toToken || !destinationChain || !switchNetworkAsync) throw new Error<{ reason: string }>({ reason: 'missing params', statusCode: 1 });
     let currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
+    let currentChainId = sourceChain.chainId;
     try {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
-        switchNetwork(destinationChain.chainId)
-        const needApprove = await needApproveforSwap(sourceChain.chainId, tokenBridgeDestination, fromTokenAmountAfterBridge);
+        try {
+          currentChainId = (await switchNetworkAsync(destinationChain.chainId)).id
+        } catch (err: any) {
+          throw new Error<{ reason: string; step: string }>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? 'switchNetwork', statusCode: 1 });
+        }
+        const needApprove = await needApproveforSwap(currentChainId, tokenBridgeDestination, fromTokenAmountAfterBridge);
         if (needApprove) {
-          const approveCallData = await getApproveCallData(sourceChain.chainId, tokenBridgeDestination, fromTokenAmountAfterBridge);
+          const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, fromTokenAmountAfterBridge);
           const config = await prepareSendTransaction({
             request: {
               to: approveCallData.to,
@@ -546,7 +551,7 @@ const SwapProvider = ({ children }: Props) => {
           console.log('approve hash', tx.hash)
         }
 
-        const swapCallData = await getSwapCallData(sourceChain.chainId, tokenBridgeDestination, toToken, fromTokenAmountAfterBridge, address as string, slippage)
+        const swapCallData = await getSwapCallData(currentChainId, tokenBridgeDestination, toToken, fromTokenAmountAfterBridge, address as string, slippage)
         const config = await prepareSendTransaction({
           request: {
             data: swapCallData.tx.data,
@@ -567,7 +572,7 @@ const SwapProvider = ({ children }: Props) => {
 
     }
 
-  }, [sourceChain, fromTokenAmountAfterBridge, address, toToken, slippage])
+  }, [sourceChain, destinationChain, fromTokenAmountAfterBridge, address, toToken, slippage])
 
   const bridge = useCallback(async () => {
     let currentStep = 'bridge';
@@ -620,7 +625,6 @@ const SwapProvider = ({ children }: Props) => {
       changeSteps(error.props.step, 'failed')
     }
   }, [swapBeforeBridge, bridge, swapAfterBridge])
-
 
   return (
     <SwapContext.Provider value={{
