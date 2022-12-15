@@ -608,7 +608,7 @@ const SwapProvider = ({ children }: Props) => {
         abi: AxelarGateway.abi,
         functionName: 'sendToken',
         args: [
-          sourceChain.name,
+          destinationChain.name,
           address,
           tokenBridgeSource.symbol,
           fromTokenAmountAfterBridge
