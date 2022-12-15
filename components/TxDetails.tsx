@@ -1,7 +1,6 @@
 import React from 'react'
 import { useSwap } from '../contexts/Swap'
 import { TbGasStation } from "react-icons/tb";
-import Spinner from './Layout/Spinner';
 export default function TxDetails() {
   const { fullGasCostInUsd } = useSwap()
   return (
