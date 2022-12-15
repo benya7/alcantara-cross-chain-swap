@@ -411,7 +411,9 @@ const SwapProvider = ({ children }: Props) => {
   
   const insufficientBalance = useMemo(() => {
     if (!fromToken || fromTokenAmount === '') return false;
-
+    console.log('fromTokenBalance', fromTokenBalance.toString())
+    console.log('fromTokenAmount', parseUnits(fromTokenAmount, fromToken.decimals).toString())
+    console.log('insufficientBalance', fromTokenBalance.lt(parseUnits(fromTokenAmount, fromToken.decimals)))
     return fromTokenBalance.lt(parseUnits(fromTokenAmount, fromToken.decimals))
 
   },[fromTokenAmount, fromTokenBalance, fromToken])
