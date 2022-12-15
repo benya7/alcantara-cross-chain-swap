@@ -1,4 +1,3 @@
-
 import axios, { AxiosError, AxiosInstance, CancelTokenSource } from "axios";
 import { BaseToken } from "../config/tokens";
 
@@ -24,12 +23,23 @@ interface ApiRequest<TRequest = any, TParams = any> {
 }
 
 export interface ApiService {
-  getAllowance: (chainId: number, params: AllowanceParams) => Promise<{ allowance: number }>;
-  getApproveCallData: (chainId: number, params: ApproveCallDataParams ) => Promise<ApproveCallDataResponse>;
+  getAllowance: (
+    chainId: number,
+    params: AllowanceParams
+  ) => Promise<{ allowance: number }>;
+  getApproveCallData: (
+    chainId: number,
+    params: ApproveCallDataParams
+  ) => Promise<ApproveCallDataResponse>;
   getQuote: (chainId: number, params: QuoteParams) => Promise<QuoteResponse>;
-  getSwapCallData: (chainId: number, params: SwapCallDataParams) => Promise<SwapCallDataResponse>;
-  getTokensPrice: (chainId: number ) => Promise<{[key: string]: string}>,
-  getNativeTokenPrice: (params: NativeTokenPriceParams) => Promise<NativeTokenPriceResponse>,
+  getSwapCallData: (
+    chainId: number,
+    params: SwapCallDataParams
+  ) => Promise<SwapCallDataResponse>;
+  getTokensPrice: (chainId: number) => Promise<{ [key: string]: string }>;
+  getNativeTokenPrice: (
+    params: NativeTokenPriceParams
+  ) => Promise<NativeTokenPriceResponse>;
 }
 
 type AllowanceParams = {
@@ -101,19 +111,21 @@ export type SwapCallDataResponse = {
   fromTokenAmount: string;
   toTokenAmount: string;
   protocols: string;
-  from: string;
-  to: string;
-  data: string;
-  value: string;
-  gasPrice: string;
-  gas: string;
+  tx: {
+    from?: string;
+    to: string;
+    data?: string;
+    value?: string;
+    gasPrice?: string;
+    gas?: string;
+  };
 };
 
 type NativeTokenPriceParams = {
-    ids: string;
-    vs_currencies: string;
-  }
-type NativeTokenPriceResponse = { [key: string]: { [key: string]: string } }
+  ids: string;
+  vs_currencies: string;
+};
+type NativeTokenPriceResponse = { [key: string]: { [key: string]: string } };
 
 export class ApiClient implements ApiService {
   private readonly client: AxiosInstance;
