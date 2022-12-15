@@ -612,10 +612,7 @@ const SwapProvider = ({ children }: Props) => {
           address,
           tokenBridgeSource.symbol,
           fromTokenAmountAfterBridge
-        ],
-        overrides: {
-          gasLimit: BigNumber.from(70000)
-        }
+        ]
       })
       currentStep = 'send token from gateway contract'
       const txBridge = await writeContract(configCallGateway);
