@@ -24,7 +24,7 @@ import paginateTokensList from "../utils/paginateTokensList";
 import ERC20 from '../contracts/interfaces/IERC20.sol/IERC20.json';
 import AxelarGateway from '../contracts/interfaces/IAxelarGateway.sol/IAxelarGateway.json';
 import { BigNumber, constants } from "ethers";
-import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData } from "@wagmi/core";
+import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData, fetchBalance } from "@wagmi/core";
 import Error from "next/error";
 import { useNotification, Notification } from "./Notification";
 import sleep from "../utils/sleep";
@@ -70,6 +70,7 @@ interface SwapContextInterface {
   readySwap: boolean;
   bridgeAndSwap: () => Promise<void>;
   fullGasCostInUsd: { value: number; state: 'fetching' | 'done' };
+  insufficientBalance: boolean;
 }
 
 export type ChainOption = { label: string; value: number; image: string };
@@ -111,7 +112,8 @@ const SwapProvider = ({ children }: Props) => {
   const destinationChainsRef = useRef<SelectInstance<ChainOption>>(null);
   const fromTokenRef = useRef<SelectInstance<BaseToken>>(null);
   const toTokenRef = useRef<SelectInstance<BaseToken>>(null);
-  const [fromTokenAmount, setFromTokenAmount] = useState("");
+  const [fromTokenAmount, setFromTokenAmount] = useState("1");
+  const [fromTokenBalance, setFromTokenBalance] = useState(BigNumber.from("0"));
   const [fromTokenAmountAfterBridge, setFromTokenAmountAfterBridge] = useState('');
   const [toTokenAmount, setToTokenAmount] = useState("");
   const { open: openModalFromToken, showModal: showModalFromToken, hideModal: hideModalFromToken } = useModal();
@@ -259,6 +261,8 @@ const SwapProvider = ({ children }: Props) => {
     destinationChainsRef.current?.selectOption({ label: newValue.name, value: newValue.chainId, image: newValue.image })
   };
 
+
+
   useEffect(() => {
     const selectedSourceChain = Object.values(chainsDetailsData).find((x) => x.chainId === (chain?.id ?? 1));
     if (selectedSourceChain) {
@@ -315,6 +319,15 @@ const SwapProvider = ({ children }: Props) => {
     setNotification({ title: 'Switch Network', description: errorSwitchNetwork.message, type: 'error' });
   }, [errorSwitchNetwork])
 
+ const fetchFromTokenBalance = useCallback(async () => {
+  if (!address || !fromToken) return;
+  return fetchBalance({
+    address,
+    token: fromToken.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? fromToken.address as `0x${string}` : undefined,
+    chainId: sourceChain.chainId
+
+  })
+ },[fromToken, sourceChain, address]);
 
   const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
     const nativeTokenId = getNativeTokenId(chainId.toString());
@@ -325,7 +338,7 @@ const SwapProvider = ({ children }: Props) => {
   }, [apiService])
 
   const getQuote = useCallback(async () => {
-    if (!fromToken || !toToken || !fromTokenAmount || fromTokenAmount === '0' || fromTokenAmount === '0.' || isLoadingSwitchNetwork || sourceChain === destinationChain) {
+    if (!fromToken || !toToken || !fromTokenAmount || !(parseFloat(fromTokenAmount) > 0 ) || isLoadingSwitchNetwork || sourceChain === destinationChain) {
       setToTokenAmount('')
       setFullGasCostInUsd({ value: 0, state: 'fetching' });
       return;
@@ -391,6 +404,19 @@ const SwapProvider = ({ children }: Props) => {
   ]);
 
   useEffect(() => {
+    fetchFromTokenBalance().then(res => {
+      setFromTokenBalance(res?.value ?? BigNumber.from('0'))
+    })
+  }, [fetchFromTokenBalance])
+  
+  const insufficientBalance = useMemo(() => {
+    if (!fromToken || fromTokenAmount === '') return false;
+
+    return fromTokenBalance.lt(parseUnits(fromTokenAmount, fromToken.decimals))
+
+  },[fromTokenAmount, fromTokenBalance, fromToken])
+
+  useEffect(() => {
     getQuote()
     const interval = setInterval(async () => await getQuote(), 8000)
     return () => {
@@ -416,7 +442,7 @@ const SwapProvider = ({ children }: Props) => {
   // }, [destinationChain])
 
   const readySwap = useMemo(() => {
-    return !(fromToken && toToken && address && fromTokenAmount && toTokenAmount && sourceChain !== destinationChain)
+    return !(fromToken && toToken && address && fromTokenAmount && toTokenAmount && sourceChain !== destinationChain && !insufficientBalance)
   }, [
     fromToken,
     toToken,
@@ -635,7 +661,8 @@ const SwapProvider = ({ children }: Props) => {
       bridgeAndSwap,
       readySwap,
       steps,
-      fullGasCostInUsd
+      fullGasCostInUsd,
+      insufficientBalance
     }}>
       {children}
     </SwapContext.Provider>
