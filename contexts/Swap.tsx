@@ -327,7 +327,7 @@ const SwapProvider = ({ children }: Props) => {
       chainId: sourceChain.chainId
 
     })
-  }, [fromToken, sourceChain, address]);
+  }, [fromToken, address]);
 
   const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
     const nativeTokenId = getNativeTokenId(chainId.toString());
