@@ -12,7 +12,7 @@ import {
   useState,
 } from "react";
 import { useAccount, useNetwork, useSwitchNetwork } from "wagmi";
-import { AxelarChain, chainsDetailsData } from "../config/chains";
+import { AxelarChain, chainsDetailsData, relayerGasFeeInUusdc } from "../config/chains";
 import { ActionMeta, SelectInstance, SingleValue } from "react-select";
 import { BaseToken, baseTokens } from "../config/tokens";
 import useList from "../hooks/useList";
@@ -518,6 +518,14 @@ const SwapProvider = ({ children }: Props) => {
     }
   }, [getQuote])
 
+  
+  const calculateTranserFee = useCallback((fromToken: BaseToken, fromTokenAmount: string, feeInTokenBrdge: string) => {
+    const ratio = parseFloat(fromTokenAmount) / parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals));
+    const feeAmountFormated = parseFloat(formatUnits(feeInTokenBrdge, tokenBridgeSource.decimals))
+    const transferFeeInFromToken = (ratio * feeAmountFormated).toString();
+    return { inFromToken: parseUnits(transferFeeInFromToken, fromToken.decimals).toString(), inUsd: feeAmountFormated.toFixed() }
+  }, [tokenBridgeAmount, tokenBridgeSource])
+
   // fetch transfer fee and calculate it in fromToken
   useEffect(() => {
     if (!tokenBridgeAmount || !fromToken || !fromTokenAmount || isLoadingSwitchNetwork) return;
@@ -528,17 +536,23 @@ const SwapProvider = ({ children }: Props) => {
       parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals))
     ).then(({ fee }) => {
       if (fee) {
-        const ratio = parseFloat(fromTokenAmount) / parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals));
-        const feeAmountFormated = parseFloat(formatUnits(fee.amount, tokenBridgeSource.decimals))
-        const transferFeeInFromToken = (ratio * feeAmountFormated).toString();
+        const { inFromToken, inUsd } = calculateTranserFee(fromToken, fromTokenAmount, fee.amount)
         setTransferFee({
           inTokenBridge: fee.amount,
-          inFromToken: parseUnits(transferFeeInFromToken, fromToken.decimals).toString(),
-          inUsd: feeAmountFormated.toFixed(),
+          inFromToken,
+          inUsd
         });
       }
-    });
-  }, [tokenBridgeAmount, sourceChain, destinationChain, tokenBridgeSource, isLoadingSwitchNetwork]);
+    }).catch((err) => {
+      const fee = BigNumber.from(relayerGasFeeInUusdc[sourceChain.name]).add(relayerGasFeeInUusdc[destinationChain.name]).toString()
+      const { inFromToken, inUsd } = calculateTranserFee(fromToken, fromTokenAmount, fee)
+      setTransferFee({
+        inTokenBridge: fee,
+        inFromToken,
+        inUsd
+      });
+    })
+  }, [sourceChain, destinationChain, isLoadingSwitchNetwork, calculateTranserFee, fromToken, fromTokenAmount]);
 
   // getprices
   // useEffect(() => {

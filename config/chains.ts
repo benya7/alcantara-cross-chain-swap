@@ -71,6 +71,15 @@ export const chainsConfigData: Chain[] = [
     },
   },
 ];
+export const relayerGasFeeInUusdc: { [key: string]: string} = {
+  Ethereum: "10000000",
+  Polygon: "1000000",
+  Arbitrum: "1000000",
+  Fantom: "1000000",
+  Avalanche: "1000000",
+  Binance: "1000000",
+  Moonbeam: "1000000",
+}
 
 const mainnetChains = {
   ethereum: {
