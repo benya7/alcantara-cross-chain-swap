@@ -31,6 +31,7 @@ import getNativeTokenId from "../utils/getNativeTokenId";
 import formatDecimals from "../utils/formatDecimals";
 import { AxelarAssetTransfer, AxelarGMPRecoveryAPI, AxelarQueryAPI, CHAINS, Environment, sleep } from "@axelar-network/axelarjs-sdk";
 import getNativeSymbol from "../utils/getNativeSymbol";
+import getExplorerUrl from "../utils/getExplorerUrl";
 
 interface SwapContextInterface {
   chains: AxelarChain[];
@@ -72,6 +73,9 @@ interface SwapContextInterface {
   insufficientBalance: boolean;
   sourceChain: AxelarChain;
   destinationChain: AxelarChain;
+  swapBeforeBridgeTxHash: string;
+  bridgeTxHash: string;
+  swapAfterBridgeTxHash: string;
 }
 
 export type ChainOption = { label: string; value: number; image: string };
@@ -130,7 +134,9 @@ const SwapProvider = ({ children }: Props) => {
   const [maxApproveAmount, setMaxApproveAmount] = useState(true);
   const [txCost, setTxCost] = useState<TxCost>({ value: 0, state: 'fetching' })
   const { setNotification } = useNotification();
-
+  const [swapBeforeBridgeTxHash, setTxHashBeforeBridgeTxHash] = useState('');
+  const [bridgeTxHash, setTxHashBridgeTxHash] = useState('');
+  const [swapAfterBridgeTxHash, setTxHashAfterBridgeTxHash] = useState('');
   const incrementPageFromTokensList = () => {
     setPageFromToken((prev) => prev + 1);
   };
@@ -623,8 +629,9 @@ const SwapProvider = ({ children }: Props) => {
         })
         currentStep = `swap before bridge: ${fromToken.symbol} to ${tokenBridgeSource.symbol}`
         const tx = await sendTransaction(config);
-        await tx.wait()
-        console.log('swap hash', tx.hash)
+        await tx.wait(1)
+        console.log('swap before bridge hash', tx.hash)
+        setTxHashBeforeBridgeTxHash(`${getExplorerUrl(sourceChain.chainId)}/tx/${tx.hash}`)
       }
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'swapBeforeBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
@@ -684,7 +691,9 @@ const SwapProvider = ({ children }: Props) => {
         currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
         const tx = await sendTransaction(config);
         await tx.wait()
-        console.log('swap swapBeforeBrigde hash', tx.hash)
+        console.log('swap after bridge hash', tx.hash)
+        setTxHashAfterBridgeTxHash(`${getExplorerUrl(currentChainId)}/tx/${tx.hash}`)
+
       }
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
@@ -720,6 +729,7 @@ const SwapProvider = ({ children }: Props) => {
       const txBridge = await writeContract(configTransfer);
       await txBridge.wait()
       console.log('bridge bridge hash', txBridge.hash)
+      setTxHashBridgeTxHash(`${getExplorerUrl(sourceChain.chainId)}/tx/${txBridge.hash}`)
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
@@ -782,7 +792,10 @@ const SwapProvider = ({ children }: Props) => {
       txCost,
       insufficientBalance,
       sourceChain,
-      destinationChain
+      destinationChain,
+      swapBeforeBridgeTxHash,
+      bridgeTxHash,
+      swapAfterBridgeTxHash
     }}>
       {children}
     </SwapContext.Provider>
