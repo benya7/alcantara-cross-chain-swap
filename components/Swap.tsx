@@ -168,7 +168,7 @@ export default function Swap() {
       </TokenCard>
     </div>
     <ActionButton
-      disabled={readySwap}
+      disabled={!readySwap}
       onClick={bridgeAndSwap}
     />
     {
