@@ -508,7 +508,7 @@ const SwapProvider = ({ children }: Props) => {
         });
       }
     });
-  }, [fromToken, tokenBridgeAmount, sourceChain, destinationChain, tokenBridgeSource, isLoadingSwitchNetwork]);
+  }, [tokenBridgeAmount, sourceChain, destinationChain, tokenBridgeSource, isLoadingSwitchNetwork]);
 
   // getprices
   // useEffect(() => {
