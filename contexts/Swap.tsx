@@ -29,7 +29,7 @@ import { useNotification } from "./Notification";
 import getGasCost from "../utils/getGasCost";
 import getNativeTokenId from "../utils/getNativeTokenId";
 import formatDecimals from "../utils/formatDecimals";
-import { AxelarAssetTransfer, AxelarGMPRecoveryAPI, AxelarQueryAPI, CHAINS, Environment } from "@axelar-network/axelarjs-sdk";
+import { AxelarAssetTransfer, AxelarGMPRecoveryAPI, AxelarQueryAPI, CHAINS, Environment, sleep } from "@axelar-network/axelarjs-sdk";
 import getNativeSymbol from "../utils/getNativeSymbol";
 
 interface SwapContextInterface {
@@ -94,6 +94,7 @@ const stepsInitialState: Steps = {
 
 const axelarQuery = new AxelarQueryAPI({ environment: Environment.MAINNET });
 const axelarAssetTransfer = new AxelarAssetTransfer({ environment: Environment.MAINNET });
+const axelarGMPRecovery = new AxelarGMPRecoveryAPI({ environment: Environment.MAINNET });
 
 const SwapProvider = ({ children }: Props) => {
   const apiService = useApiService();
@@ -635,6 +636,17 @@ const SwapProvider = ({ children }: Props) => {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
         try {
           currentChainId = (await switchNetworkAsync(destinationChain.chainId)).id
+          currentStep = `await receive ${tokenBridgeDestination.symbol} after bridge`
+
+          while (true) {
+            const balanceAfterBridge = await fetchBalance({
+              address: address,
+              token: tokenBridgeDestination.address as `0x${string}`,
+              chainId: currentChainId
+            });
+            if (balanceAfterBridge && balanceAfterBridge.value.gte(tokenBridgeAmount)) break;
+            await sleep(3000);
+          }
         } catch (err: any) {
           throw new Error<TransactionError>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? 'switchNetwork', statusCode: 1 });
         }
@@ -724,6 +736,7 @@ const SwapProvider = ({ children }: Props) => {
       changeSteps(error.props.step, 'failed')
     }
   }, [swapBeforeBridge, bridge, swapAfterBridge])
+
 
   return (
     <SwapContext.Provider value={{
