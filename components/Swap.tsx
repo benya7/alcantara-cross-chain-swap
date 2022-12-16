@@ -197,8 +197,8 @@ export default function Swap() {
                 {steps['swapBeforeBridge'].state === 'failed' && <HiOutlineXCircle className="m-auto mt-2 h-6 w-6 text-red-600" />}
               </div>
               <div className="border rounded-xl py-3">
-                <div className="inline-flex gap-2 justify-center w-full">
-                  <p>Transfer</p>
+                <div className="inline-flex flex-wrap gap-2 justify-center w-full">
+                  <p>Send</p>
                   <span className="flex gap-1 items-center font-semibold">
                     <img src={tokenBridgeDestination.logoURI} className='h-5 w-5' alt="" />
                     {tokenBridgeDestination.symbol}
