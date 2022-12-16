@@ -77,7 +77,7 @@ type Steps = { [key: string]: { state: 'loading' | 'completed' | 'failed' } };
 const SwapContext = createContext<SwapContextInterface | undefined>(
   undefined
 );
-
+type TransactionError = { reason: string; step: string };
 const stepsInitialState: Steps = {
   swapBeforeBridge: {
     state: 'loading'
@@ -93,6 +93,10 @@ const stepsInitialState: Steps = {
 interface Props {
   children: ReactNode;
 };
+
+const axelarQuery = new AxelarQueryAPI({
+  environment: Environment.MAINNET,
+});
 
 const SwapProvider = ({ children }: Props) => {
   const apiService = useApiService();
@@ -112,9 +116,11 @@ const SwapProvider = ({ children }: Props) => {
   const fromTokenRef = useRef<SelectInstance<BaseToken>>(null);
   const toTokenRef = useRef<SelectInstance<BaseToken>>(null);
   const [fromTokenAmount, setFromTokenAmount] = useState("1");
-  const [fromTokenBalance, setFromTokenBalance] = useState(BigNumber.from("0"));
-  const [fromTokenAmountAfterBridge, setFromTokenAmountAfterBridge] = useState('');
+  const [fromTokenBalance, setFromTokenBalance] = useState('0');
+  const [tokenBridgeAmount, setTokenBridgeAmount] = useState('');
   const [toTokenAmount, setToTokenAmount] = useState("");
+  const [transerFee, setTransferFee] = useState<{ inTokenBridge: string; inFromToken: string; }>({ inTokenBridge: '0', inFromToken: '0' });
+  const [insufficientTokenBridge, setInsufficientTokenBridge] = useState<boolean | undefined>();
   const { open: openModalFromToken, showModal: showModalFromToken, hideModal: hideModalFromToken } = useModal();
   const { open: openModalToToken, showModal: showModalToToken, hideModal: hideModalToToken } = useModal();
   const { open: openModalTransaction, showModal: showModalTransaction, hideModal: hideModalTransaction } = useModal();
@@ -166,6 +172,7 @@ const SwapProvider = ({ children }: Props) => {
   const resetSteps = () => {
     setSteps(stepsInitialState);
   }
+
 
   useEffect(() => {
     paginate('from', sourceChain.name.toLowerCase(), pageFromToken)
@@ -318,15 +325,17 @@ const SwapProvider = ({ children }: Props) => {
     setNotification({ title: 'Switch Network', description: errorSwitchNetwork.message, type: 'error' });
   }, [errorSwitchNetwork])
 
-  const fetchFromTokenBalance = useCallback(async () => {
-    if (!address || !fromToken) return;
-    return fetchBalance({
+
+
+  const fetchTokenBalance = useCallback(async (token: BaseToken) => {
+    if (!address) return;
+    return await fetchBalance({
       address,
-      token: fromToken.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? fromToken.address as `0x${string}` : undefined,
+      token: token.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? token.address as `0x${string}` : undefined,
       chainId: sourceChain.chainId
 
     })
-  }, [fromToken, address]);
+  }, [address, sourceChain]);
 
   const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
     const nativeTokenId = getNativeTokenId(chainId.toString());
@@ -357,7 +366,7 @@ const SwapProvider = ({ children }: Props) => {
             apiService.getQuote(destinationChain.chainId, { fromTokenAddress: tokenBridgeDestination.address, toTokenAddress: toToken.address, amount: res1.toTokenAmount })
               .then((res2) => {
                 calculateGasPriceInUsd(destinationChain.chainId, res2.estimatedGas).then(res => setFullGasCostInUsd(prev => ({ value: prev.value + res, state: 'done' })))
-                setFromTokenAmountAfterBridge(res2.toTokenAmount)
+                setTokenBridgeAmount(res2.toTokenAmount)
                 setToTokenAmount(formatDecimals(formatUnits(res2.toTokenAmount, res2.toToken.decimals)))
               })
               .catch((err: any) => {
@@ -366,7 +375,7 @@ const SwapProvider = ({ children }: Props) => {
               })
           } else {
             setFullGasCostInUsd(prev => ({ ...prev, state: 'done' }))
-            setFromTokenAmountAfterBridge(res1.toTokenAmount)
+            setTokenBridgeAmount(res1.toTokenAmount)
             setToTokenAmount(formatDecimals(formatUnits(res1.toTokenAmount, res1.toToken.decimals)))
           }
         })
@@ -382,7 +391,7 @@ const SwapProvider = ({ children }: Props) => {
         })
           .then((res) => {
             calculateGasPriceInUsd(destinationChain.chainId, res.estimatedGas).then(res => setFullGasCostInUsd(prev => ({ value: prev.value + res, state: 'done' })))
-            setFromTokenAmountAfterBridge(res.toTokenAmount)
+            setTokenBridgeAmount(res.toTokenAmount)
             setToTokenAmount(formatDecimals(formatUnits(res.toTokenAmount, res.toToken.decimals)))
           })
           .catch((err: any) => {
@@ -391,7 +400,7 @@ const SwapProvider = ({ children }: Props) => {
           })
       } else {
         setFullGasCostInUsd(prev => ({ ...prev, state: 'done' }))
-        setFromTokenAmountAfterBridge(parseUnits(fromTokenAmount, fromToken.decimals).toString())
+        setTokenBridgeAmount(parseUnits(fromTokenAmount, fromToken.decimals).toString())
         setToTokenAmount(formatDecimals(fromTokenAmount))
       }
     }
@@ -406,18 +415,35 @@ const SwapProvider = ({ children }: Props) => {
     destinationChain,
     isLoadingSwitchNetwork
   ]);
-
+  // fetch fromToken balance
   useEffect(() => {
-    fetchFromTokenBalance().then(res => {
-      setFromTokenBalance(res?.value ?? BigNumber.from('0'))
-    })
-  }, [fetchFromTokenBalance])
+    if (!fromToken) return;
+    fetchTokenBalance(fromToken).then(res => setFromTokenBalance(res?.value.toString() ?? '0'))
+  }, [fetchTokenBalance, fromToken])
+
+  // fetch tokenBridge balance and calculate if sufficient for pay transfer fee
+  useEffect(() => {
+    if (!tokenBridgeAmount || !fromToken) return;
+
+    fetchTokenBalance(tokenBridgeSource).then((res) => {
+      const balanceTokenBridgeAfterSwap = res?.value.add(tokenBridgeAmount);
+      const tokenBridgeAmountPlusFee = BigNumber.from(tokenBridgeAmount).add(transerFee.inTokenBridge);
+      setInsufficientTokenBridge(balanceTokenBridgeAfterSwap?.lt(tokenBridgeAmountPlusFee))
+    });
+  }, [transerFee, tokenBridgeSource])
 
   const insufficientBalance = useMemo(() => {
-    if (!fromToken || fromTokenAmount === '') return false;
-    return fromTokenBalance.lt(parseUnits(fromTokenAmount, fromToken.decimals))
+    if (fromTokenAmount === '' || !fromToken) return true;
+    const fromTokenAmountParsed = parseUnits(fromTokenAmount, fromToken.decimals)
 
-  }, [fromTokenAmount, fromTokenBalance, fromToken])
+    if (insufficientTokenBridge) {
+      const fromTokenAmountRequired = fromTokenAmountParsed.add(transerFee.inFromToken)
+      return fromTokenAmountRequired.gt(fromTokenBalance);
+    } else {
+      return fromTokenAmountParsed.gt(fromTokenBalance)
+    }
+
+  }, [fromTokenAmount, fromTokenBalance, insufficientTokenBridge])
 
   useEffect(() => {
     getQuote()
@@ -426,6 +452,23 @@ const SwapProvider = ({ children }: Props) => {
       clearInterval(interval)
     }
   }, [getQuote])
+
+  // fetch transfer fee and calculate it in fromToken
+  useEffect(() => {
+    if (!tokenBridgeAmount || !fromToken) return;
+    axelarQuery.getTransferFee(
+      sourceChain.name,
+      destinationChain.name,
+      'uusdc',
+      parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals))
+    ).then(({ fee }) => {
+      if (fee) {
+        const ratio = (parseFloat(fromTokenAmount) / parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals)));
+        const transferFeeInFromToken = (ratio * parseFloat(formatUnits(fee.amount, tokenBridgeSource.decimals))).toString();
+        setTransferFee({ inTokenBridge: fee.amount, inFromToken: parseUnits(transferFeeInFromToken, fromToken.decimals).toString() });
+      }
+    });
+  }, [fromToken, tokenBridgeAmount, sourceChain, destinationChain, tokenBridgeSource]);
 
   // getprices
   // useEffect(() => {
@@ -445,7 +488,7 @@ const SwapProvider = ({ children }: Props) => {
   // }, [destinationChain])
 
   const readySwap = useMemo(() => {
-    return !(fromToken && toToken && address && fromTokenAmount && toTokenAmount && sourceChain !== destinationChain && !insufficientBalance)
+    return !!(fromToken && toToken && address && fromTokenAmount && toTokenAmount && sourceChain !== destinationChain && !insufficientBalance)
   }, [
     fromToken,
     toToken,
@@ -453,7 +496,8 @@ const SwapProvider = ({ children }: Props) => {
     address,
     toTokenAmount,
     sourceChain,
-    destinationChain
+    destinationChain,
+    insufficientBalance
   ])
 
   const needApproveforSwap = useCallback(async (chainId: number, token: BaseToken, amount: string) => {
@@ -479,7 +523,7 @@ const SwapProvider = ({ children }: Props) => {
     return await apiService.getSwapCallData(chainId, {
       fromTokenAddress: fromToken.address,
       toTokenAddress: toToken.address,
-      amount: parseUnits(amount, fromToken.decimals).toString(),
+      amount: amount,
       fromAddress,
       slippage
     });
@@ -505,7 +549,14 @@ const SwapProvider = ({ children }: Props) => {
           await tx.wait()
           console.log('approve hash', tx.hash)
         }
-        const swapCallData = await getSwapCallData(sourceChain.chainId, fromToken, tokenBridgeSource, fromTokenAmount, address as string, slippage);
+        let fromTokenAmountParsed = parseUnits(fromTokenAmount, fromToken.decimals);
+        if (insufficientTokenBridge) {
+          fromTokenAmountParsed = fromTokenAmountParsed.add(transerFee.inFromToken);
+        }
+        console.log('fromTokenAmountParsed out if', fromTokenAmountParsed.toString())
+
+        const swapCallData = await getSwapCallData(sourceChain.chainId, fromToken, tokenBridgeSource, fromTokenAmountParsed.toString(), address as string, slippage);
+
         const config = await prepareSendTransaction({
           request: {
             data: swapCallData.tx.data,
@@ -522,14 +573,13 @@ const SwapProvider = ({ children }: Props) => {
         console.log('swap hash', tx.hash)
       }
     } catch (err: any) {
-      throw new Error<{ reason: string; step: string }>({ step: 'swapBeforeBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
+      throw new Error<TransactionError>({ step: 'swapBeforeBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
 
-
-  }, [sourceChain, fromToken, fromTokenAmount, address, slippage, tokenBridgeSource])
+  }, [sourceChain, fromToken, fromTokenAmount, address, slippage, tokenBridgeSource, transerFee])
 
   const swapAfterBridge = useCallback(async () => {
-    if (!sourceChain || !fromTokenAmountAfterBridge || !address || !toToken || !destinationChain || !switchNetworkAsync) throw new Error<{ reason: string }>({ reason: 'missing params', statusCode: 1 });
+    if (!sourceChain || !tokenBridgeAmount || !address || !toToken || !destinationChain || !switchNetworkAsync) throw new Error<{ reason: string }>({ reason: 'missing params', statusCode: 1 });
     let currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
     let currentChainId = sourceChain.chainId;
     try {
@@ -537,11 +587,11 @@ const SwapProvider = ({ children }: Props) => {
         try {
           currentChainId = (await switchNetworkAsync(destinationChain.chainId)).id
         } catch (err: any) {
-          throw new Error<{ reason: string; step: string }>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? 'switchNetwork', statusCode: 1 });
+          throw new Error<TransactionError>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? 'switchNetwork', statusCode: 1 });
         }
-        const needApprove = await needApproveforSwap(currentChainId, tokenBridgeDestination, fromTokenAmountAfterBridge);
+        const needApprove = await needApproveforSwap(currentChainId, tokenBridgeDestination, tokenBridgeAmount);
         if (needApprove) {
-          const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, fromTokenAmountAfterBridge);
+          const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, tokenBridgeAmount);
           const config = await prepareSendTransaction({
             request: {
               to: approveCallData.to,
@@ -555,7 +605,7 @@ const SwapProvider = ({ children }: Props) => {
           console.log('approve hash', tx.hash)
         }
 
-        const swapCallData = await getSwapCallData(currentChainId, tokenBridgeDestination, toToken, fromTokenAmountAfterBridge, address as string, slippage)
+        const swapCallData = await getSwapCallData(currentChainId, tokenBridgeDestination, toToken, tokenBridgeAmount, address as string, slippage)
         const config = await prepareSendTransaction({
           request: {
             data: swapCallData.tx.data,
@@ -572,70 +622,45 @@ const SwapProvider = ({ children }: Props) => {
         console.log('swap swapBeforeBrigde hash', tx.hash)
       }
     } catch (err: any) {
-      throw new Error<{ reason: string; step: string }>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
+      throw new Error<TransactionError>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
 
     }
 
-  }, [sourceChain, destinationChain, fromTokenAmountAfterBridge, address, toToken, slippage])
+  }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage])
 
   const bridge = useCallback(async () => {
     if (!fromToken) return;
     let currentStep = 'bridge';
+    const assetDenom = 'uusdc';
     try {
       const axelarAssetTransfer = new AxelarAssetTransfer({
         environment: Environment.MAINNET,
       });
-      CHAINS
+
       const depositAddress = await axelarAssetTransfer.getDepositAddress(
-        sourceChain.name, // source chain
-        destinationChain.name, // destination chain
-        address, // destination address
-        "uusdc" // denom of asset. See note (2) below
+        sourceChain.name,
+        destinationChain.name,
+        address,
+        assetDenom
       );
 
-      console.log(depositAddress)
-    //   const allowance = (await readContract({
-    //     address: tokenBridgeSource.address,
-    //     abi: ERC20.abi,
-    //     functionName: 'allowance',
-    //     args: [address, sourceChain.gateway]
-    //   })) as BigNumber
+      const configTransfer = await prepareWriteContract({
+        address: tokenBridgeSource.address,
+        abi: ERC20.abi,
+        functionName: 'transfer',
+        args: [
+          depositAddress,
+          BigNumber.from(tokenBridgeAmount).add(transerFee.inTokenBridge),
+        ],
+      });
 
-    //   if (allowance.lt(fromTokenAmountAfterBridge)) {
-    //     const configApproveGateway = await prepareWriteContract({
-    //       address: tokenBridgeSource.address,
-    //       abi: ERC20.abi,
-    //       functionName: 'approve',
-    //       args: [
-    //         sourceChain.gateway,
-    //         fromTokenAmountAfterBridge,
-    //       ],
-    //     });
-    //     currentStep = 'approve gateway contract'
-    //     const txApprove = await writeContract(configApproveGateway);
-    //     await txApprove.wait()
-    //     console.log('approve gateway hash', txApprove.hash)
-    //   }
-
-    //   const configCallGateway = await prepareWriteContract({
-    //     address: sourceChain.gateway,
-    //     abi: AxelarGateway.abi,
-    //     functionName: 'sendToken',
-    //     args: [
-    //       destinationChain.name,
-    //       address,
-    //       tokenBridgeSource.symbol,
-    //       fromTokenAmountAfterBridge
-    //     ]
-    //   })
-    //   currentStep = 'send token from gateway contract'
-    //   const txBridge = await writeContract(configCallGateway);
-    //   await txBridge.wait()
-    //   console.log('bridge bridge hash', txBridge.hash)
+      const txBridge = await writeContract(configTransfer);
+      await txBridge.wait()
+      console.log('bridge bridge hash', txBridge.hash)
     } catch (err: any) {
-      throw new Error<{ reason: string; step: string }>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
+      throw new Error<TransactionError>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
-  }, [sourceChain, destinationChain, tokenBridgeSource, fromTokenAmountAfterBridge, address])
+  }, [sourceChain, destinationChain, tokenBridgeSource, tokenBridgeAmount, address])
 
 
   // const bridge = useCallback(async () => {
@@ -648,14 +673,14 @@ const SwapProvider = ({ children }: Props) => {
   //       args: [address, sourceChain.gateway]
   //     })) as BigNumber
 
-  //     if (allowance.lt(fromTokenAmountAfterBridge)) {
+  //     if (allowance.lt(tokenBridgeAmount)) {
   //       const configApproveGateway = await prepareWriteContract({
   //         address: tokenBridgeSource.address,
   //         abi: ERC20.abi,
   //         functionName: 'approve',
   //         args: [
   //           sourceChain.gateway,
-  //           fromTokenAmountAfterBridge,
+  //           tokenBridgeAmount,
   //         ],
   //       });
   //       currentStep = 'approve gateway contract'
@@ -672,7 +697,7 @@ const SwapProvider = ({ children }: Props) => {
   //         destinationChain.name,
   //         address,
   //         tokenBridgeSource.symbol,
-  //         fromTokenAmountAfterBridge
+  //         tokenBridgeAmount
   //       ]
   //     })
   //     currentStep = 'send token from gateway contract'
@@ -680,9 +705,9 @@ const SwapProvider = ({ children }: Props) => {
   //     await txBridge.wait()
   //     console.log('bridge bridge hash', txBridge.hash)
   //   } catch (err: any) {
-  //     throw new Error<{ reason: string; step: string }>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
+  //     throw new Error<TransactionError>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
   //   }
-  // }, [sourceChain, destinationChain, tokenBridgeSource, fromTokenAmountAfterBridge, address])
+  // }, [sourceChain, destinationChain, tokenBridgeSource, tokenBridgeAmount, address])
 
   const bridgeAndSwap = useCallback(async () => {
     showModalTransaction()
