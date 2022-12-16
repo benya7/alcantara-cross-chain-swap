@@ -70,6 +70,8 @@ interface SwapContextInterface {
   bridgeAndSwap: () => Promise<void>;
   txCost: TxCost;
   insufficientBalance: boolean;
+  sourceChain: AxelarChain;
+  destinationChain: AxelarChain;
 }
 
 export type ChainOption = { label: string; value: number; image: string };
@@ -779,6 +781,8 @@ const SwapProvider = ({ children }: Props) => {
       steps,
       txCost,
       insufficientBalance,
+      sourceChain,
+      destinationChain
     }}>
       {children}
     </SwapContext.Provider>

@@ -84,7 +84,9 @@ export default function Swap() {
     incrementPageToTokensList,
     bridgeAndSwap,
     readySwap,
-    steps
+    steps,
+    sourceChain,
+    destinationChain
   } = useSwap();
 
 
@@ -195,7 +197,23 @@ export default function Swap() {
                 {steps['swapBeforeBridge'].state === 'failed' && <HiOutlineXCircle className="m-auto mt-2 h-6 w-6 text-red-600" />}
               </div>
               <div className="border rounded-xl py-3">
-                <p className="text-center"><span className="font-semibold">Approve</span> to gateway and <span className="font-semibold">Send</span> token</p>
+                <div className="inline-flex gap-2 justify-center w-full">
+                  <p>Transfer</p>
+                  <span className="flex gap-1 items-center font-semibold">
+                    <img src={tokenBridgeDestination.logoURI} className='h-5 w-5' alt="" />
+                    {tokenBridgeDestination.symbol}
+                  </span>
+                  <p>from</p>
+                  <span className="flex gap-1 items-center font-semibold">
+                    <img src={sourceChain.image} className='h-5 w-5' alt="" />
+                    {sourceChain.name}
+                  </span>
+                  <p>to</p>
+                  <span className="flex gap-1 items-center font-semibold">
+                    <img src={destinationChain.image} className='h-5 w-5' alt="" />
+                    {destinationChain.name}
+                  </span>
+                </div>
                 {(!(steps['swapBeforeBridge'].state === 'failed') && steps['bridge'].state === 'loading') && <Spinner className="animate-spin mt-2 m-auto h-5 w-5 text-white" />}
                 {steps['bridge'].state === 'completed' && <HiOutlineCheckCircle className="m-auto mt-2 h-6 w-6 text-green-600" />}
                 {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed') && <HiOutlineXCircle className="m-auto mt-2 h-6 w-6 text-red-600" />}
@@ -211,8 +229,8 @@ export default function Swap() {
                   <span className="flex gap-1 items-center font-semibold">
                     <img src={toToken?.logoURI} className='h-5 w-5' alt="" />
                     {toToken?.symbol}
-                  </span> 
-                </div> 
+                  </span>
+                </div>
                 {!(steps['swapBeforeBridge'].state === 'failed') && (!(steps['bridge'].state === 'failed') && steps['swapAfterBridge'].state === 'loading') && <Spinner className="animate-spin mt-2 m-auto h-5 w-5 text-white" />}
                 {steps['swapAfterBridge'].state === 'completed' && <HiOutlineCheckCircle className="m-auto mt-2 h-6 w-6 text-green-600" />}
                 {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed' || steps['swapAfterBridge'].state === 'failed') && <HiOutlineXCircle className="m-auto mt-2 h-6 w-6 text-red-600" />}
