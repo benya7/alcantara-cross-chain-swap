@@ -68,7 +68,7 @@ interface SwapContextInterface {
   steps: Steps;
   readySwap: boolean;
   bridgeAndSwap: () => Promise<void>;
-  fullGasCostInUsd: { value: number; state: 'fetching' | 'done' };
+  txCost: TxCost;
   insufficientBalance: boolean;
 }
 
@@ -78,6 +78,7 @@ const SwapContext = createContext<SwapContextInterface | undefined>(
   undefined
 );
 type TransactionError = { reason: string; step: string };
+type TxCost = { value: number; state: 'fetching' | 'done' };
 const stepsInitialState: Steps = {
   swapBeforeBridge: {
     state: 'loading'
@@ -119,7 +120,7 @@ const SwapProvider = ({ children }: Props) => {
   const [fromTokenBalance, setFromTokenBalance] = useState('0');
   const [tokenBridgeAmount, setTokenBridgeAmount] = useState('');
   const [toTokenAmount, setToTokenAmount] = useState("");
-  const [transerFee, setTransferFee] = useState<{ inTokenBridge: string; inFromToken: string; }>({ inTokenBridge: '0', inFromToken: '0' });
+  const [transerFee, setTransferFee] = useState<{ inTokenBridge: string; inFromToken: string; inUsd: string }>({ inTokenBridge: '0', inFromToken: '0', inUsd: '0' });
   const [insufficientTokenBridge, setInsufficientTokenBridge] = useState<boolean | undefined>();
   const { open: openModalFromToken, showModal: showModalFromToken, hideModal: hideModalFromToken } = useModal();
   const { open: openModalToToken, showModal: showModalToToken, hideModal: hideModalToToken } = useModal();
@@ -128,7 +129,7 @@ const SwapProvider = ({ children }: Props) => {
   const [pageFromToken, setPageFromToken] = useState(1);
   const [pageToToken, setPageToToken] = useState(1);
   const [maxApproveAmount, setMaxApproveAmount] = useState(true);
-  const [fullGasCostInUsd, setFullGasCostInUsd] = useState<{ value: number; state: 'fetching' | 'done' }>({ value: 0, state: 'fetching' })
+  const [txCost, setTxCost] = useState<TxCost>({ value: 0, state: 'fetching' })
   const { setNotification } = useNotification();
 
   const incrementPageFromTokensList = () => {
@@ -351,59 +352,93 @@ const SwapProvider = ({ children }: Props) => {
   }, [apiService])
 
   const getQuote = useCallback(async () => {
+
+    let txCostValue = 0;
+    let txCostState: 'fetching' | 'done' = 'fetching';
+
     if (!fromToken || !toToken || !fromTokenAmount || !(parseFloat(fromTokenAmount) > 0) || isLoadingSwitchNetwork || sourceChain === destinationChain) {
       setToTokenAmount('')
-      setFullGasCostInUsd({ value: 0, state: 'fetching' });
+      setTxCost({ value: txCostValue, state: txCostState });
       return;
     };
-    setFullGasCostInUsd({ value: 0, state: 'fetching' });
-    calculateGasPriceInUsd(sourceChain.chainId, '115000').then(res => setFullGasCostInUsd(prev => ({ ...prev, value: prev.value + res })))
+
+    setTxCost({ value: txCostValue, state: txCostState });
+    txCostValue = parseInt(transerFee.inUsd);
+
     if (fromToken.symbol !== tokenBridgeSource.symbol) {
-      apiService.getQuote(sourceChain.chainId, { fromTokenAddress: fromToken.address, toTokenAddress: tokenBridgeSource.address, amount: parseUnits(fromTokenAmount, fromToken.decimals).toString() })
-        .then((res1) => {
-          calculateGasPriceInUsd(sourceChain.chainId, res1.estimatedGas).then(res => setFullGasCostInUsd(prev => ({ ...prev, value: prev.value + res })))
-          if (toToken.symbol !== tokenBridgeDestination.symbol) {
-            apiService.getQuote(destinationChain.chainId, { fromTokenAddress: tokenBridgeDestination.address, toTokenAddress: toToken.address, amount: res1.toTokenAmount })
-              .then((res2) => {
-                calculateGasPriceInUsd(destinationChain.chainId, res2.estimatedGas).then(res => setFullGasCostInUsd(prev => ({ value: prev.value + res, state: 'done' })))
-                setTokenBridgeAmount(res2.toTokenAmount)
-                setToTokenAmount(formatDecimals(formatUnits(res2.toTokenAmount, res2.toToken.decimals)))
-              })
-              .catch((err: any) => {
-                setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
-                setToTokenAmount('')
-              })
-          } else {
-            setFullGasCostInUsd(prev => ({ ...prev, state: 'done' }))
+      try {
+        const res1 = await apiService.getQuote(
+          sourceChain.chainId, {
+          fromTokenAddress: fromToken.address,
+          toTokenAddress: tokenBridgeSource.address,
+          amount: parseUnits(fromTokenAmount, fromToken.decimals).toString()
+        })
+
+        const estimatedGasRes1 = await calculateGasPriceInUsd(sourceChain.chainId, res1.estimatedGas);
+        txCostValue = txCostValue + estimatedGasRes1
+
+        if (toToken.symbol !== tokenBridgeDestination.symbol) {
+          try {
+            const res2 = await apiService.getQuote(destinationChain.chainId, {
+              fromTokenAddress: tokenBridgeDestination.address,
+              toTokenAddress: toToken.address,
+              amount: res1.toTokenAmount
+            })
+            const estimatedGasRes2 = await calculateGasPriceInUsd(destinationChain.chainId, res2.estimatedGas)
+            txCostValue = txCostValue + estimatedGasRes2
+            txCostState = 'done'
+            setTxCost({ value: txCostValue, state: txCostState })
+
             setTokenBridgeAmount(res1.toTokenAmount)
-            setToTokenAmount(formatDecimals(formatUnits(res1.toTokenAmount, res1.toToken.decimals)))
+            setToTokenAmount(formatDecimals(formatUnits(res2.toTokenAmount, res2.toToken.decimals)))
+          } catch (err: any) {
+            setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
+            setToTokenAmount('')
+            console.log(err)
+            return;
           }
-        })
-        .catch((err: any) => {
-          setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
-          setToTokenAmount('')
-        })
+        } else {
+          txCostState = 'done'
+          setTxCost({ value: txCostValue, state: txCostState })
+          setTokenBridgeAmount(res1.toTokenAmount)
+          setToTokenAmount(formatDecimals(formatUnits(res1.toTokenAmount, res1.toToken.decimals)))
+        }
+      } catch (err: any) {
+        setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
+        setToTokenAmount('')
+        console.log(err)
+        return;
+      }
 
     } else {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
-        apiService.getQuote(destinationChain.chainId, {
-          fromTokenAddress: tokenBridgeDestination.address, toTokenAddress: toToken.address, amount: parseUnits(fromTokenAmount, fromToken.decimals).toString()
-        })
-          .then((res) => {
-            calculateGasPriceInUsd(destinationChain.chainId, res.estimatedGas).then(res => setFullGasCostInUsd(prev => ({ value: prev.value + res, state: 'done' })))
-            setTokenBridgeAmount(res.toTokenAmount)
-            setToTokenAmount(formatDecimals(formatUnits(res.toTokenAmount, res.toToken.decimals)))
+        try {
+          const res = await apiService.getQuote(destinationChain.chainId, {
+            fromTokenAddress: tokenBridgeDestination.address,
+            toTokenAddress: toToken.address,
+            amount: parseUnits(fromTokenAmount, fromToken.decimals).toString()
           })
-          .catch((err: any) => {
-            setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
-            setToTokenAmount('')
-          })
+          const estimatedGasRes = await calculateGasPriceInUsd(destinationChain.chainId, res.estimatedGas)
+          txCostValue = txCostValue + estimatedGasRes
+          txCostState = 'done'
+          setTxCost({ value: txCostValue, state: txCostState })
+
+          setTokenBridgeAmount(res.toTokenAmount)
+          setToTokenAmount(formatDecimals(formatUnits(res.toTokenAmount, res.toToken.decimals)))
+        } catch (err: any) {
+          setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
+          setToTokenAmount('')
+          console.log(err)
+          return;
+        }
       } else {
-        setFullGasCostInUsd(prev => ({ ...prev, state: 'done' }))
+        txCostState = 'done'
+        setTxCost({ value: txCostValue, state: txCostState })
         setTokenBridgeAmount(parseUnits(fromTokenAmount, fromToken.decimals).toString())
         setToTokenAmount(formatDecimals(fromTokenAmount))
       }
     }
+
 
   }, [
     fromToken,
@@ -412,8 +447,8 @@ const SwapProvider = ({ children }: Props) => {
     fromTokenAmount,
     toToken,
     tokenBridgeDestination,
-    destinationChain,
-    isLoadingSwitchNetwork
+    isLoadingSwitchNetwork,
+    transerFee
   ]);
   // fetch fromToken balance
   useEffect(() => {
@@ -455,7 +490,7 @@ const SwapProvider = ({ children }: Props) => {
 
   // fetch transfer fee and calculate it in fromToken
   useEffect(() => {
-    if (!tokenBridgeAmount || !fromToken) return;
+    if (!tokenBridgeAmount || !fromToken || !fromTokenAmount || isLoadingSwitchNetwork) return;
     axelarQuery.getTransferFee(
       sourceChain.name,
       destinationChain.name,
@@ -463,12 +498,17 @@ const SwapProvider = ({ children }: Props) => {
       parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals))
     ).then(({ fee }) => {
       if (fee) {
-        const ratio = (parseFloat(fromTokenAmount) / parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals)));
-        const transferFeeInFromToken = (ratio * parseFloat(formatUnits(fee.amount, tokenBridgeSource.decimals))).toString();
-        setTransferFee({ inTokenBridge: fee.amount, inFromToken: parseUnits(transferFeeInFromToken, fromToken.decimals).toString() });
+        const ratio = parseFloat(fromTokenAmount) / parseFloat(formatUnits(tokenBridgeAmount, tokenBridgeSource.decimals));
+        const feeAmountFormated = parseFloat(formatUnits(fee.amount, tokenBridgeSource.decimals))
+        const transferFeeInFromToken = (ratio * feeAmountFormated).toString();
+        setTransferFee({
+          inTokenBridge: fee.amount,
+          inFromToken: parseUnits(transferFeeInFromToken, fromToken.decimals).toString(),
+          inUsd: feeAmountFormated.toFixed(),
+        });
       }
     });
-  }, [fromToken, tokenBridgeAmount, sourceChain, destinationChain, tokenBridgeSource]);
+  }, [fromToken, tokenBridgeAmount, sourceChain, destinationChain, tokenBridgeSource, isLoadingSwitchNetwork]);
 
   // getprices
   // useEffect(() => {
@@ -761,7 +801,7 @@ const SwapProvider = ({ children }: Props) => {
       bridgeAndSwap,
       readySwap,
       steps,
-      fullGasCostInUsd,
+      txCost,
       insufficientBalance,
     }}>
       {children}
