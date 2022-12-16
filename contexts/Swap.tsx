@@ -113,7 +113,7 @@ const SwapProvider = ({ children }: Props) => {
   const { switchNetwork, switchNetworkAsync, error: errorSwitchNetwork, isLoading: isLoadingSwitchNetwork } = useSwitchNetwork();
   const { list: fromTokensList, addItem: addFromTokenToList, clear: clearFromTokensList, setList: setFromTokensList } = useList<BaseToken>();
   const { list: toTokensList, addItem: addToTokenToList, clear: clearToTokensList, setList: setToTokensList } = useList<BaseToken>();
-  const [slippage, setSlippage] = useState("0.5");
+  const [slippage, setSlippage] = useState("1");
   const [allowPartialFill, setAllowPartialFill] = useState(true);
   const sourceChainsRef = useRef<SelectInstance<ChainOption>>(null);
   const destinationChainsRef = useRef<SelectInstance<ChainOption>>(null);
