@@ -119,7 +119,7 @@ const SwapProvider = ({ children }: Props) => {
   const destinationChainsRef = useRef<SelectInstance<ChainOption>>(null);
   const fromTokenRef = useRef<SelectInstance<BaseToken>>(null);
   const toTokenRef = useRef<SelectInstance<BaseToken>>(null);
-  const [fromTokenAmount, setFromTokenAmount] = useState("1");
+  const [fromTokenAmount, setFromTokenAmount] = useState<string>("1");
   const [fromTokenBalance, setFromTokenBalance] = useState('0');
   const [tokenBridgeAmount, setTokenBridgeAmount] = useState('');
   const [toTokenAmount, setToTokenAmount] = useState("");
@@ -197,9 +197,19 @@ const SwapProvider = ({ children }: Props) => {
   }, [destinationChain]);
 
   const onChangeFromTokenAmount = (e: ChangeEvent<HTMLInputElement>) => {
-    const regex = /^\d*\.?\d{0,6}$/;
-    if (regex.test(e.target.value)) {
-      setFromTokenAmount(e.target.value)
+    console.log(e.target.value)
+    if (!e.target.value || !(parseInt(e.target.value) > 0) && !e.target.value.includes('.')) {
+      setFromTokenAmount('0')
+      return;
+    }
+    let currentValue = e.target.value
+    if (currentValue.startsWith('0') && currentValue.charAt(1) !== '.') {
+      currentValue = e.target.value.slice(1)
+    }
+
+    const regex = /^\d+\.?\d{0,6}$/;
+    if (regex.test(currentValue)) {
+      setFromTokenAmount(currentValue)
     }
   };
 
