@@ -371,6 +371,8 @@ const SwapProvider = ({ children }: Props) => {
 
     setTxCost({ value: txCostValue, state: txCostState });
     txCostValue = parseInt(transerFee.inUsd);
+    const gasCostForTransferBridge = await calculateGasPriceInUsd(sourceChain.chainId, '70000')
+    txCostValue = txCostValue + gasCostForTransferBridge;
 
     if (fromToken.symbol !== tokenBridgeSource.symbol) {
       try {
