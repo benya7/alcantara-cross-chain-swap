@@ -540,13 +540,12 @@ const SwapProvider = ({ children }: Props) => {
   }, [getQuote])
 
   const readySwap = useMemo(() => {
-    return !!(fromToken && toToken && address && !fromTokenAmount.value.gt(0) && !toTokenAmount.value.gt(0) && sourceChain !== destinationChain && !insufficientBalance)
+    return !!(fromToken && toToken && address && fromTokenAmount.value.gt(0) && sourceChain !== destinationChain && !insufficientBalance)
   }, [
     fromToken,
     toToken,
     fromTokenAmount,
     address,
-    toTokenAmount,
     sourceChain,
     destinationChain,
     insufficientBalance
