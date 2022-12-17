@@ -37,7 +37,7 @@ export default function TokenCard({
           </div>
         </button>
         {readOnly ? (
-          tokenAmount ? (
+          tokenAmount && parseFloat(tokenAmount) > 0 ? (
             <input type="text" className="w-24 font-semibold p-0 text-xl text-slate-50 bg-transparent border-none border focus:ring-0 text-end" onChange={onChangeTokenAmount} value={tokenAmount} readOnly={readOnly} />
           ) : (
             <div className='animate-pulse w-24 h-8 bg-slate-500 rounded'></div>

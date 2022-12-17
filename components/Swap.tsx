@@ -10,6 +10,7 @@ import NetworkSwitcher from "./NetworkSwitcher";
 import ActionButton from "./ActionButton";
 import Spinner from "./Layout/Spinner";
 import ViewInExplorerButton from "./ViewInExplorerButton";
+import formatDecimals from "../utils/formatDecimals";
 
 const options = Object.values(chainsDetailsData).map((x) => {
   return { label: x.name, value: x.chainId, image: x.image }
@@ -118,7 +119,7 @@ export default function Swap() {
         token={fromToken}
         openModal={openModalFromToken}
         onChangeTokenAmount={onChangeFromTokenAmount}
-        tokenAmount={fromTokenAmount}
+        tokenAmount={fromTokenAmount.formated}
       >
         <Modal>
           <div className="flex flex-col gap-2 py-4 px-6">
@@ -149,7 +150,7 @@ export default function Swap() {
         openModal={openModalToToken}
         readOnly={true}
         primary
-        tokenAmount={toTokenAmount}
+        tokenAmount={formatDecimals(toTokenAmount.formated)}
       >
         <Modal>
           <div className="flex flex-col gap-2 py-4 px-6">
