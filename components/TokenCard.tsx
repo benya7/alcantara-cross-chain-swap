@@ -5,6 +5,7 @@ import { clsx } from 'clsx';
 
 interface Props {
   showModal: () => void;
+  actionText: string;
   token?: BaseToken;
   openModal: boolean;
   children: ReactNode;
@@ -16,6 +17,7 @@ interface Props {
 
 export default function TokenCard({
   showModal,
+  actionText,
   token,
   openModal,
   children,
@@ -27,7 +29,7 @@ export default function TokenCard({
 
   return (
     <div className={primary ? 'rounded-2xl py-3 px-4 bg-slate-700' : 'rounded-2xl py-3 px-4 border border-slate-700'}>
-      <p className='text-xs'>You sell:</p>
+      <p className='text-xs'>{actionText}</p>
       <div className="flex-1 flex items-center justify-between">
         <button onClick={showModal} className='px-2 py-1 rounded-xl'>
           <div className="flex gap-1 items-center hover:text-white delay-100">

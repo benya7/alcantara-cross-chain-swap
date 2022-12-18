@@ -116,6 +116,7 @@ export default function Swap() {
     <div className="flex flex-col py-2 gap-3">
       <TokenCard
         showModal={showModalFromToken}
+        actionText='You buy'
         token={fromToken}
         openModal={openModalFromToken}
         onChangeTokenAmount={onChangeFromTokenAmount}
@@ -146,6 +147,7 @@ export default function Swap() {
       </TokenCard>
       <TokenCard
         showModal={showModalToToken}
+        actionText='You sell'
         token={toToken}
         openModal={openModalToToken}
         readOnly={true}
