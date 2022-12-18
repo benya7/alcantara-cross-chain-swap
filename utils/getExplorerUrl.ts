@@ -3,7 +3,7 @@ export default function getExplorerUrl(chainId: number) {
     case 1:
       return "https://etherscan.io";
     case 137:
-      return "https://polygonscan.io";
+      return "https://polygonscan.com";
     case 42161:
       return "https://arbiscan.io";
     case 250:
