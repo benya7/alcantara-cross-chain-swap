@@ -21,19 +21,16 @@ import { formatUnits, parseUnits } from "ethers/lib/utils.js";
 import { useModal } from "../hooks/useModal";
 import paginateTokensList from "../utils/paginateTokensList";
 import ERC20 from '../contracts/interfaces/IERC20.sol/IERC20.json';
-import AxelarGateway from '../contracts/interfaces/IAxelarGateway.sol/IAxelarGateway.json';
 import { BigNumber, constants } from "ethers";
 import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData, fetchBalance, readContract } from "@wagmi/core";
 import Error from "next/error";
 import { useNotification } from "./Notification";
 import getGasCost from "../utils/getGasCost";
 import getNativeTokenId from "../utils/getNativeTokenId";
-import formatDecimals from "../utils/formatDecimals";
-import { AxelarAssetTransfer, AxelarGMPRecoveryAPI, AxelarQueryAPI, CHAINS, Environment, sleep } from "@axelar-network/axelarjs-sdk";
+import { AxelarAssetTransfer, AxelarGMPRecoveryAPI, AxelarQueryAPI, Environment } from "@axelar-network/axelarjs-sdk";
 import getNativeSymbol from "../utils/getNativeSymbol";
 import getExplorerUrl from "../utils/getExplorerUrl";
 import processTokenAmount from "../utils/processTokenAmount";
-import { type } from "os";
 import { SwapCallDataParamsV2, SwapRouter } from "../utils/apiClient";
 
 interface SwapContextInterface {
@@ -789,7 +786,7 @@ const SwapProvider = ({ children }: Props) => {
           chainId: destinationChain.chainId
         });
         if (balanceAfterBridge && newBalance.value.gte(balanceAfterBridge.value.add(tokenBridgeAmount.value))) break;
-        await sleep(3000);
+        await new Promise((resolve) => setTimeout(resolve, 5000));
       }
       setTxHashUrl((prev) => ({ ...prev, swapAfterBridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${txBridge.hash}` }));
 
