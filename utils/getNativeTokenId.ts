@@ -8,7 +8,7 @@ export default function getNativeTokenId(chainId: string) {
       return 'ethereum';
     case '250':
       return 'fantom';
-    case '43131':
+    case '43114':
       return 'avalanche-2';
     case '56':
       return 'binancecoin';
