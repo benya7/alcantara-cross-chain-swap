@@ -1,3 +1,4 @@
+import { type } from "os";
 import axios, { AxiosError, AxiosInstance, CancelTokenSource } from "axios";
 import { BaseToken } from "../config/tokens";
 
@@ -17,7 +18,7 @@ interface ApiClientOptions {
 
 interface ApiRequest<TRequest = any, TParams = any> {
   readonly url: string;
-  readonly method?: "GET";
+  readonly method?: "GET" | "POST";
   readonly requestData?: TRequest;
   readonly params?: any;
 }
@@ -27,6 +28,9 @@ export interface ApiService {
     chainId: number,
     params: AllowanceParams
   ) => Promise<{ allowance: number }>;
+  getSpenderAddress: (
+    chainId: number
+  ) => Promise<{ address: string }>;
   getApproveCallData: (
     chainId: number,
     params: ApproveCallDataParams
@@ -40,6 +44,14 @@ export interface ApiService {
   getNativeTokenPrice: (
     params: NativeTokenPriceParams
   ) => Promise<NativeTokenPriceResponse>;
+  getQuoteV2: (
+    chainId: number,
+    params: QuoteParamsV2
+  ) => Promise<QuoteResponseV2>;
+  getSwapCallDataV2: (
+    chainId: number,
+    params: SwapCallDataParamsV2
+  ) => Promise<SwappCallDataResponseV2>;
 }
 
 type AllowanceParams = {
@@ -121,10 +133,121 @@ export type SwapCallDataResponse = {
   };
 };
 
+export type SwapRouter = {
+  amount: string;
+  part: number;
+  subRoutes: {
+    fromTokenAddress: string;
+    toTokenAddress: string;
+    part: number;
+    market: {
+      name: string;
+      id: string;
+    };
+    meta: {
+      denominator?: string;
+      fee?: number;
+      fromAmount?: string;
+      fromTokenAddress: string;
+      fromTokenAmount: string;
+      fromTokenIndex?: number;
+      isUnderlying?: boolean;
+      toTokenAddress: string;
+      toTokenAmount: string;
+      toTokenIndex?: number;
+      stable?: boolean;
+      order?: {
+        marketId: string;
+        tokens: {
+          fromToken: {
+            address: string;
+            decimals: number;
+            PriceInUsd: number;
+            listingWeight: number;
+            balance: string;
+          };
+          toToken: {
+            address: string;
+            decimals: number;
+            PriceInUsd: number;
+            listingWeight: number;
+            balance: string;
+          };
+        };
+        feeInBasisPoints: number;
+      };
+    };
+  }[][];
+}[];
+
+type QuoteParamsV2 = {
+  fromTokenAddress: string;
+  toTokenAddress: string;
+  amount: string;
+  preset: string;
+  gasPrice: string;
+  protocolWhiteList?: string;
+  walletAddress?: string;
+};
+
+type QuoteResponseV2 = {
+  bestResult: {
+    gasUnitsConsumed: string;
+    routes: SwapRouter;
+    toTokenAmount: string;
+    toTokenEthAmount: string;
+  };
+  results: any;
+  preset: {
+    preset: string;
+    deepLevel: number;
+    mainParts: number;
+    subParts: number;
+  };
+};
+
+export type SwapCallDataParamsV2 = {
+  isLedgerLive?: boolean;
+  fromTokenAddress: string;
+  toTokenAddress: string;
+  amount: string;
+  guaranteedAmount: string;
+  minTokensAmount: string;
+  allowedSlippagePercent: number;
+  burnChi?: boolean;
+  enableEstimate?: boolean;
+  ethValue?: string;
+  gasPrice: string;
+  referrerAddress?: string;
+  walletAddress: string;
+  allowUnoSwap?: boolean;
+  pathfinderData: {
+    routes: SwapRouter;
+    mainParts: number;
+    splitParts: number;
+    deepLevel: number;
+  };
+  allowPartialFill?: boolean;
+  protectPMM?: boolean;
+  compatibilityMode?: boolean;
+  additionalProtocolSlippage?: number;
+};
+
+type SwappCallDataResponseV2 = {
+  deadline: number;
+  data: string;
+  gasLimit: number;
+  estimation: boolean;
+  ethValue: string;
+  revertReason: string | null;
+  returnAmount: string;
+};
+
 type NativeTokenPriceParams = {
   ids: string;
   vs_currencies: string;
 };
+
 type NativeTokenPriceResponse = { [key: string]: { [key: string]: string } };
 
 export class ApiClient implements ApiService {
@@ -162,6 +285,12 @@ export class ApiClient implements ApiService {
       url: `${chainId}/approve/allowance`,
       method: "GET",
       params,
+    });
+
+  public getSpenderAddress = async (chainId: number) => 
+    await this.callApi<{ address: string }>({
+      url: `${chainId}/approve/spender`,
+      method: "GET",
     });
 
   public getApproveCallData = async (
@@ -210,6 +339,28 @@ export class ApiClient implements ApiService {
       "https://api.coingecko.com/api/v3"
     );
 
+  public getQuoteV2 = async (chainId: number, params: QuoteParamsV2) =>
+    await this.callApi<QuoteResponseV2>(
+      {
+        url: `/chain/${chainId}/router/v5/quotes`,
+        method: "GET",
+        params,
+      },
+      "https://pathfinder.1inch.io/v1.4"
+    );
+
+  public getSwapCallDataV2 = async (
+    chainId: number,
+    requestData: SwapCallDataParamsV2
+  ) =>
+    await this.callApi<SwappCallDataResponseV2>(
+      {
+        url: `/${chainId}/swap/build`,
+        method: "POST",
+        requestData,
+      },
+      "https://swap-builder.1inch.io/v5.0"
+    );
   /**
    * Helper with saint defaults to perform an HTTP call.
    * @param request A request to perform.

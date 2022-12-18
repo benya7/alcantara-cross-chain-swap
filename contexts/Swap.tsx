@@ -34,6 +34,7 @@ import getNativeSymbol from "../utils/getNativeSymbol";
 import getExplorerUrl from "../utils/getExplorerUrl";
 import processTokenAmount from "../utils/processTokenAmount";
 import { type } from "os";
+import { SwapCallDataParamsV2, SwapRouter } from "../utils/apiClient";
 
 interface SwapContextInterface {
   chains: AxelarChain[];
@@ -344,8 +345,6 @@ const SwapProvider = ({ children }: Props) => {
     setNotification({ title: 'Switch Network', description: errorSwitchNetwork.message, type: 'error' });
   }, [errorSwitchNetwork])
 
-
-
   const fetchTokenBalance = useCallback(async (token: BaseToken) => {
     if (!address) return;
     return await fetchBalance({
@@ -394,7 +393,10 @@ const SwapProvider = ({ children }: Props) => {
       setTxCost({ value: txCostValue, state: txCostState });
       return;
     };
+    const { gasPrice: gasPriceSource } = await fetchFeeData({ chainId: sourceChain.chainId })
+    const { gasPrice: gasPriceDestination } = await fetchFeeData({ chainId: destinationChain.chainId })
 
+    const preset = 'maxReturnResult'
     setTxCost({ value: txCostValue, state: txCostState });
     const costForTransferBridge = await calculateGasPriceInUsd(sourceChain.chainId, '70000')
     txCostValue = parseFloat(formatUnits(fixedTransferFee, tokenBridgeSource.decimals))
@@ -402,30 +404,34 @@ const SwapProvider = ({ children }: Props) => {
 
     if (fromToken.symbol !== tokenBridgeSource.symbol) {
       try {
-        const res1 = await apiService.getQuote(
+        const res1 = await apiService.getQuoteV2(
           sourceChain.chainId, {
           fromTokenAddress: fromToken.address,
           toTokenAddress: tokenBridgeSource.address,
-          amount: fromTokenAmount.raw
+          amount: fromTokenAmount.raw,
+          preset,
+          gasPrice: gasPriceSource?.toString() ?? '150000000000'
         })
 
-        const estimatedGasRes1 = await calculateGasPriceInUsd(sourceChain.chainId, res1.estimatedGas);
+        const estimatedGasRes1 = await calculateGasPriceInUsd(sourceChain.chainId, res1.bestResult.gasUnitsConsumed);
         txCostValue = txCostValue + estimatedGasRes1
 
         if (toToken.symbol !== tokenBridgeDestination.symbol) {
           try {
-            const res2 = await apiService.getQuote(destinationChain.chainId, {
+            const res2 = await apiService.getQuoteV2(destinationChain.chainId, {
               fromTokenAddress: tokenBridgeDestination.address,
               toTokenAddress: toToken.address,
-              amount: res1.toTokenAmount
+              amount: res1.bestResult.toTokenAmount,
+              preset,
+              gasPrice: gasPriceDestination?.toString() ?? '150000000000'
             })
-            const estimatedGasRes2 = await calculateGasPriceInUsd(destinationChain.chainId, res2.estimatedGas)
+            const estimatedGasRes2 = await calculateGasPriceInUsd(destinationChain.chainId, res2.bestResult.gasUnitsConsumed)
             txCostValue = txCostValue + estimatedGasRes2
             txCostState = 'done'
             setTxCost({ value: txCostValue, state: txCostState })
 
-            setTokenBridgeAmount(processTokenAmount(BigNumber.from(res1.toTokenAmount), res1.toToken.decimals))
-            setToTokenAmount(processTokenAmount(BigNumber.from(res2.toTokenAmount), res2.toToken.decimals))
+            setTokenBridgeAmount(processTokenAmount(BigNumber.from(res1.bestResult.toTokenAmount), tokenBridgeSource.decimals))
+            setToTokenAmount(processTokenAmount(BigNumber.from(res2.bestResult.toTokenAmount), toToken.decimals))
           } catch (err: any) {
             setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
             setTokenBridgeAmount(processTokenAmount())
@@ -436,8 +442,8 @@ const SwapProvider = ({ children }: Props) => {
         } else {
           txCostState = 'done'
           setTxCost({ value: txCostValue, state: txCostState })
-          setTokenBridgeAmount(processTokenAmount(BigNumber.from(res1.toTokenAmount), res1.toToken.decimals))
-          setToTokenAmount(processTokenAmount(BigNumber.from(res1.toTokenAmount), res1.toToken.decimals))
+          setTokenBridgeAmount(processTokenAmount(BigNumber.from(res1.bestResult.toTokenAmount), tokenBridgeSource.decimals))
+          setToTokenAmount(processTokenAmount(BigNumber.from(res1.bestResult.toTokenAmount), tokenBridgeSource.decimals))
         }
       } catch (err: any) {
         setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
@@ -450,18 +456,20 @@ const SwapProvider = ({ children }: Props) => {
     } else {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
         try {
-          const res = await apiService.getQuote(destinationChain.chainId, {
+          const res = await apiService.getQuoteV2(destinationChain.chainId, {
             fromTokenAddress: tokenBridgeDestination.address,
             toTokenAddress: toToken.address,
-            amount: fromTokenAmount.raw
+            amount: fromTokenAmount.raw,
+            preset,
+            gasPrice: gasPriceDestination?.toString() ?? '150000000000'
           })
-          const estimatedGasRes = await calculateGasPriceInUsd(destinationChain.chainId, res.estimatedGas)
+          const estimatedGasRes = await calculateGasPriceInUsd(destinationChain.chainId, res.bestResult.gasUnitsConsumed)
           txCostValue = txCostValue + estimatedGasRes
           txCostState = 'done'
           setTxCost({ value: txCostValue, state: txCostState })
 
-          setTokenBridgeAmount(processTokenAmount(BigNumber.from(res.toTokenAmount), res.toToken.decimals))
-          setToTokenAmount(processTokenAmount(BigNumber.from(res.toTokenAmount), res.toToken.decimals))
+          setTokenBridgeAmount(processTokenAmount(BigNumber.from(res.bestResult.toTokenAmount), toToken.decimals))
+          setToTokenAmount(processTokenAmount(BigNumber.from(res.bestResult.toTokenAmount), toToken.decimals))
         } catch (err: any) {
           setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
           setTokenBridgeAmount(processTokenAmount())
@@ -515,7 +523,7 @@ const SwapProvider = ({ children }: Props) => {
       const transerFeeInFromToken = parseUnits(
         (ratio * parseFloat(formatUnits(fixedTransferFee, tokenBridgeSource.decimals))).toFixed(fromToken.decimals),
         fromToken.decimals
-        )
+      )
       return fromTokenAmount.value.add(transerFeeInFromToken).gt(fromTokenBalance.value);
     } else {
       return fromTokenAmount.value.gt(fromTokenBalance.value)
@@ -566,13 +574,17 @@ const SwapProvider = ({ children }: Props) => {
     return await apiService.getApproveCallData(chainId, { tokenAddress: token.address, amount: parsedAmount })
   };
 
-  const getSwapCallData = async (chainId: number, fromToken: BaseToken, toToken: BaseToken, amount: string, fromAddress: string, slippage: string) => {
-    return await apiService.getSwapCallData(chainId, {
-      fromTokenAddress: fromToken.address,
-      toTokenAddress: toToken.address,
-      amount: amount,
-      fromAddress,
-      slippage
+  const getSwapCallData = async (chainId: number, params: Omit<SwapCallDataParamsV2, 'minTokensAmount'>) => {
+    const slippageInToToken = BigNumber.from(params.guaranteedAmount.slice(0, params.guaranteedAmount.length - 2))
+
+    return await apiService.getSwapCallDataV2(chainId, {
+      ...params,
+      minTokensAmount: BigNumber.from(params.guaranteedAmount).sub(slippageInToToken).sub(1).toString(),
+      ethValue: params.fromTokenAddress === '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? params.amount : undefined,
+      allowUnoSwap: true,
+      allowPartialFill: true,
+      enableEstimate: true,
+      protectPMM: true,
     });
   };
 
@@ -582,8 +594,20 @@ const SwapProvider = ({ children }: Props) => {
     try {
       if (fromToken.symbol !== tokenBridgeSource.symbol) {
         const needApprove = await needApproveforSwap(sourceChain.chainId, fromToken, fromTokenAmount.float);
+
+        let fromTokenAmountParsed = fromTokenAmount.raw
+
+        if (insufficientTokenBridge) {
+          const ratio = fromTokenAmount.float / tokenBridgeAmount.float
+          const transerFeeInFromToken = parseUnits(
+            (ratio * parseFloat(formatUnits(fixedTransferFee, tokenBridgeSource.decimals))).toFixed(fromToken.decimals),
+            fromToken.decimals
+          )
+          fromTokenAmountParsed = fromTokenAmount.value.add(transerFeeInFromToken).toString()
+        }
+
         if (needApprove) {
-          const approveCallData = await getApproveCallData(sourceChain.chainId, fromToken, fromTokenAmount.raw);
+          const approveCallData = await getApproveCallData(sourceChain.chainId, fromToken, fromTokenAmountParsed);
           const config = await prepareSendTransaction({
             request: {
               to: approveCallData.to,
@@ -596,28 +620,44 @@ const SwapProvider = ({ children }: Props) => {
           await tx.wait()
           console.log('approve hash', tx.hash)
         }
-        let fromTokenAmountParsed = fromTokenAmount.raw
-        
-        if  (insufficientTokenBridge) {
-          const ratio = fromTokenAmount.float / tokenBridgeAmount.float
-          const transerFeeInFromToken = parseUnits(
-            (ratio * parseFloat(formatUnits(fixedTransferFee, tokenBridgeSource.decimals))).toFixed(fromToken.decimals),
-            fromToken.decimals
-          )
-          fromTokenAmountParsed = fromTokenAmount.value.add(transerFeeInFromToken).toString()
-        }
-        const swapCallData = await getSwapCallData(sourceChain.chainId, fromToken, tokenBridgeSource, fromTokenAmountParsed, address as string, slippage);
+
+        const { gasPrice } = await fetchFeeData({ chainId: sourceChain.chainId })
+
+        const quote = await apiService.getQuoteV2(sourceChain.chainId, {
+          fromTokenAddress: fromToken.address,
+          toTokenAddress: tokenBridgeSource.address,
+          amount: fromTokenAmountParsed,
+          preset: 'maxReturnResult',
+          gasPrice: gasPrice?.toString() ?? '150000000000'
+        })
+
+        const swapCallData = await getSwapCallData(sourceChain.chainId, {
+          fromTokenAddress: fromToken.address,
+          toTokenAddress: tokenBridgeSource.address,
+          amount: fromTokenAmountParsed,
+          guaranteedAmount: quote.bestResult.toTokenAmount,
+          allowedSlippagePercent: parseFloat(slippage),
+          walletAddress: address as string,
+          pathfinderData: {
+            routes: quote.bestResult.routes,
+            mainParts: quote.preset.mainParts,
+            splitParts: quote.preset.subParts,
+            deepLevel: quote.preset.deepLevel
+          },
+          gasPrice: gasPrice?.toString() ?? '150000000000'
+        });
+        const spender = await apiService.getSpenderAddress(sourceChain.chainId)
 
         const config = await prepareSendTransaction({
           request: {
-            data: swapCallData.tx.data,
-            from: swapCallData.tx.from,
-            gasLimit: swapCallData.tx.gas,
-            gasPrice: swapCallData.tx.gasPrice,
-            to: swapCallData.tx.to,
-            value: swapCallData.tx.value
+            data: swapCallData.data,
+            from: address,
+            gasLimit: swapCallData.gasLimit,
+            to: spender.address,
+            value: swapCallData.ethValue
           }
         })
+
         currentStep = `swap before bridge: ${fromToken.symbol} to ${tokenBridgeSource.symbol}`
         const tx = await sendTransaction(config);
         await tx.wait(1)
@@ -636,22 +676,22 @@ const SwapProvider = ({ children }: Props) => {
     let currentChainId = sourceChain.chainId;
     try {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
-        try {
-          currentChainId = (await switchNetworkAsync(destinationChain.chainId)).id
-          currentStep = `await receive ${tokenBridgeDestination.symbol} after bridge`
+        currentChainId = (await switchNetworkAsync(destinationChain.chainId)).id
+        // try {
+        //   currentStep = `await receive ${tokenBridgeDestination.symbol} after bridge`
 
-          while (true) {
-            const balanceAfterBridge = await fetchBalance({
-              address: address,
-              token: tokenBridgeDestination.address as `0x${string}`,
-              chainId: currentChainId
-            });
-            if (balanceAfterBridge && balanceAfterBridge.value.gte(tokenBridgeAmount.value)) break;
-            await sleep(3000);
-          }
-        } catch (err: any) {
-          throw new Error<TransactionError>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? 'switchNetwork', statusCode: 1 });
-        }
+        //   while (true) {
+        //     const balanceAfterBridge = await fetchBalance({
+        //       address: address,
+        //       token: tokenBridgeDestination.address as `0x${string}`,
+        //       chainId: currentChainId
+        //     });
+        //     if (balanceAfterBridge && balanceAfterBridge.value.gte(tokenBridgeAmount.value)) break;
+        //     await sleep(3000);
+        //   }
+        // } catch (err: any) {
+        //   throw new Error<TransactionError>({ step: 'swapAfterBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? 'switchNetwork', statusCode: 1 });
+        // }
         const needApprove = await needApproveforSwap(currentChainId, tokenBridgeDestination, tokenBridgeAmount.float);
         if (needApprove) {
           const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, tokenBridgeAmount.formated);
@@ -668,17 +708,43 @@ const SwapProvider = ({ children }: Props) => {
           console.log('approve hash', tx.hash)
         }
 
-        const swapCallData = await getSwapCallData(currentChainId, tokenBridgeDestination, toToken, tokenBridgeAmount.formated, address as string, slippage)
+        const { gasPrice } = await fetchFeeData({ chainId: currentChainId })
+
+        const quote = await apiService.getQuoteV2(currentChainId, {
+          fromTokenAddress: tokenBridgeDestination.address,
+          toTokenAddress: toToken.address,
+          amount: tokenBridgeAmount.formated,
+          preset: 'maxReturnResult',
+          gasPrice: gasPrice?.toString() ?? '150000000000'
+        })
+
+        const swapCallData = await getSwapCallData(currentChainId, {
+          fromTokenAddress: tokenBridgeDestination.address,
+          toTokenAddress: toToken.address,
+          amount: tokenBridgeAmount.formated,
+          guaranteedAmount: quote.bestResult.toTokenAmount,
+          allowedSlippagePercent: parseFloat(slippage),
+          walletAddress: address as string,
+          pathfinderData: {
+            routes: quote.bestResult.routes,
+            mainParts: quote.preset.mainParts,
+            splitParts: quote.preset.subParts,
+            deepLevel: quote.preset.deepLevel
+          },
+          gasPrice: gasPrice?.toString() ?? '150000000000'
+        });
+        const spender = await apiService.getSpenderAddress(currentChainId)
+
         const config = await prepareSendTransaction({
           request: {
-            data: swapCallData.tx.data,
-            from: swapCallData.tx.from,
-            gasLimit: swapCallData.tx.gas,
-            gasPrice: swapCallData.tx.gasPrice,
-            to: swapCallData.tx.to,
-            value: swapCallData.tx.value
+            data: swapCallData.data,
+            from: address,
+            gasLimit: swapCallData.gasLimit,
+            to: spender.address,
+            value: swapCallData.ethValue
           }
         })
+
         currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
         const tx = await sendTransaction(config);
         await tx.wait()
@@ -694,11 +760,10 @@ const SwapProvider = ({ children }: Props) => {
   }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage])
 
   const bridge = useCallback(async () => {
-    if (!fromToken) return;
+    if (!fromToken || !address ) return;
     let currentStep = 'bridge';
     const assetDenom = 'uusdc';
     try {
-
 
       const depositAddress = await axelarAssetTransfer.getDepositAddress(
         sourceChain.name,
@@ -706,7 +771,6 @@ const SwapProvider = ({ children }: Props) => {
         address,
         assetDenom
       );
-
       const configTransfer = await prepareWriteContract({
         address: tokenBridgeSource.address,
         abi: ERC20.abi,
@@ -720,11 +784,29 @@ const SwapProvider = ({ children }: Props) => {
       const txBridge = await writeContract(configTransfer);
       await txBridge.wait()
       console.log('bridge bridge hash', txBridge.hash)
+      currentStep = `await receive ${tokenBridgeDestination.symbol} after bridge`
+
+      const balanceAfterBridge = await fetchBalance({
+        address: address,
+        token: tokenBridgeDestination.address as `0x${string}`,
+        chainId: destinationChain.chainId
+      });
+
+      while (true) {
+        const newBalance = await fetchBalance({
+          address: address,
+          token: tokenBridgeDestination.address as `0x${string}`,
+          chainId: destinationChain.chainId
+        });
+        if (balanceAfterBridge && newBalance.value.gte(balanceAfterBridge.value.add(tokenBridgeAmount.value))) break;
+        await sleep(3000);
+      }
+      
       setTxHashBridgeTxHash(`${getExplorerUrl(sourceChain.chainId)}/tx/${txBridge.hash}`)
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
-  }, [sourceChain, destinationChain, tokenBridgeSource, tokenBridgeAmount, address, fixedTransferFee])
+  }, [sourceChain, destinationChain, tokenBridgeSource, tokenBridgeDestination, tokenBridgeAmount, address, fixedTransferFee])
 
 
   const bridgeAndSwap = useCallback(async () => {
