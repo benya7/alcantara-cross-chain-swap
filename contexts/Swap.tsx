@@ -682,10 +682,9 @@ const SwapProvider = ({ children }: Props) => {
   const swapAfterBridge = useCallback(async () => {
     if (!sourceChain || !tokenBridgeAmount || !address || !toToken || !destinationChain || !switchNetworkAsync) throw new Error<{ reason: string }>({ reason: 'missing params', statusCode: 1 });
     let currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
-    let currentChainId = sourceChain.chainId;
     try {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
-        currentChainId = (await switchNetworkAsync(destinationChain.chainId)).id
+        const {id: currentChainId} = await switchNetworkAsync(destinationChain.chainId)
         const needApprove = await needApproveforSwap(currentChainId, tokenBridgeDestination, tokenBridgeAmount.float);
         if (needApprove) {
           const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, tokenBridgeAmount.formated);
