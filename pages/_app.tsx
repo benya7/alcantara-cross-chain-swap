@@ -8,6 +8,7 @@ import { client } from '../wagmi'
 import Layout from '../components/Layout/Layout'
 import { NotificationProvider } from '../contexts/Notification'
 import Spinner from '../components/Layout/Spinner'
+import { Provider, WebSocketProvider } from '@wagmi/core'
 
 function App({ Component, pageProps }: AppProps) {
   const [mounted, setMounted] = React.useState(false)

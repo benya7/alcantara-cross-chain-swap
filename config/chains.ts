@@ -1,4 +1,4 @@
-import { Chain } from "wagmi";
+import { Chain } from "@wagmi/core";
 
 export interface AxelarChain {
   name: string;
@@ -9,59 +9,16 @@ export interface AxelarChain {
   gasReceiver: string;
 }
 
-export const chainsConfigData: Chain[] = [
-  {
-    id: 56,
-    name: "BNB Chain",
-    network: "bnbchain",
-    nativeCurrency: { name: "BNB", symbol: "BNB", decimals: 18 },
-    rpcUrls: {
-      default: "https://rpc.ankr.com/bsc",
-    },
-    blockExplorers: {
-      default: {
-        name: "Bscscan",
-        url: "https://bscscan.com",
-      },
-    },
-  },
-  {
-    id: 43114,
-    name: "Avalanche",
-    network: "avalanche",
-    nativeCurrency: { name: "AVAX", symbol: "AVAX", decimals: 18 },
-    rpcUrls: {
-      default: "https://rpc.ankr.com/avalanche",
-    },
-    blockExplorers: {
-      default: {
-        name: "Snowtrace",
-        url: "https://snowtrace.io",
-      },
-    },
-  },
-  {
-    id: 250,
-    name: "Fantom",
-    network: "fantom",
-    nativeCurrency: { name: "FTM", symbol: "FTM", decimals: 18 },
-    rpcUrls: {
-      default: "https://rpc.ankr.com/fantom",
-    },
-    blockExplorers: {
-      default: {
-        name: "Ftmscan",
-        url: "https://ftmscan.com",
-      },
-    },
-  },
+export const customChains: Chain[] = [
   {
     id: 1284,
     name: "Moonbeam",
     network: "moonbeam",
     nativeCurrency: { name: "GMLR", symbol: "GMLR", decimals: 18 },
     rpcUrls: {
-      default: "https://rpc.ankr.com/moonbeam",
+      default: {
+        http: ["https://rpc.ankr.com/moonbeam"],
+      },
     },
     blockExplorers: {
       default: {
@@ -71,6 +28,7 @@ export const chainsConfigData: Chain[] = [
     },
   },
 ];
+
 export const relayerGasFeeInUusdc: { [key: string]: string} = {
   Ethereum: "10000000",
   Polygon: "1000000",

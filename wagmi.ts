@@ -1,11 +1,12 @@
-import { Chain, chain, configureChains, createClient } from "wagmi";
-
-import { CoinbaseWalletConnector } from "wagmi/connectors/coinbaseWallet";
-import { InjectedConnector } from "wagmi/connectors/injected";
-import { MetaMaskConnector } from "wagmi/connectors/metaMask";
-import { WalletConnectConnector } from "wagmi/connectors/walletConnect";
+import { mainnet, polygon, arbitrum, bsc, avalanche, fantom } from "@wagmi/chains";
+import { configureChains } from "@wagmi/core";
 import { publicProvider } from "wagmi/providers/public";
-import { chainsConfigData } from "./config/chains";
+import { customChains } from "./config/chains";
+import { MetaMaskConnector } from "@wagmi/connectors/metaMask"
+import { CoinbaseWalletConnector } from "@wagmi/connectors/coinbaseWallet";
+import { WalletConnectConnector } from "@wagmi/connectors/walletConnect";
+import { InjectedConnector } from "@wagmi/connectors/injected";
+import { createClient } from "wagmi";
 
 // const parsedLocalChains: Chain[] = localChains.map((localChain) => ({
 //   id: localChain.chainId,
@@ -22,7 +23,7 @@ import { chainsConfigData } from "./config/chains";
 // }));
 
 const { chains, provider, webSocketProvider } = configureChains(
-  [chain.mainnet, chain.polygon, chain.arbitrum, ...chainsConfigData],
+  [mainnet, polygon, arbitrum, bsc, avalanche, fantom, ...customChains],
   [publicProvider()]
 );
 
