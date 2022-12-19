@@ -262,6 +262,7 @@ const SwapProvider = ({ children }: Props) => {
   const onChangeFromToken = (newValue: SingleValue<BaseToken>, actionMeta: ActionMeta<BaseToken>) => {
     if (newValue) {
       setFromToken(newValue);
+      setFromTokenAmount(processTokenAmount('1', newValue.decimals))
       hideModalFromToken();
       setPageFromToken(1);
     }
