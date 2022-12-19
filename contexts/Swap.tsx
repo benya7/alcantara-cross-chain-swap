@@ -78,7 +78,9 @@ interface SwapContextInterface {
 
 export type ChainOption = { label: string; value: number; image: string };
 
-type Steps = { [key: string]: { state: 'loading' | 'completed' | 'failed' } };
+export type Steps = { [key: string]: { state: 'loading' | 'completed' | 'failed' } };
+
+export type TxHashUrl = { swapBeforeBridge: string; bridge: string; swapAfterBridge: string; };
 
 type TransactionError = { reason: string; step: string };
 
@@ -133,7 +135,7 @@ const SwapProvider = ({ children }: Props) => {
   const [maxApproveAmount, setMaxApproveAmount] = useState(true);
   const [txCost, setTxCost] = useState<TxCost>({ value: 0, state: 'fetching' })
   const { setNotification } = useNotification();
-  const [txHashUrl, setTxHashUrl] = useState<{ swapBeforeBridge: string; bridge: string; swapAfterBridge: string; }>({
+  const [txHashUrl, setTxHashUrl] = useState<TxHashUrl>({
     swapBeforeBridge: '',
     bridge: '',
     swapAfterBridge: ''
