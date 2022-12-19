@@ -79,7 +79,7 @@ export default function Transaction({
               <div className="flex-1 flex flex-col justify-center">
                 {steps['swapBeforeBridge'].state === 'loading' && <Spinner className="animate-spin h-7 w-7 mx-auto text-white" />}
                 {steps['swapBeforeBridge'].state === 'completed' && <HiOutlineCheckCircle className="h-6 w-6 mx-auto text-green-600" />}
-                {steps['swapBeforeBridge'].state === 'failed' && <HiOutlineXCircle className="h-6 w-6 mx-auto text-red-600" />}
+                {steps['swapBeforeBridge'].state === 'failed' && <HiOutlineXCircle className="h-7 w-7 mx-auto text-red-600" />}
                 {txHashUrl.swapBeforeBridge !== '' && <ViewInExplorerButton url={txHashUrl.swapBeforeBridge} />}
               </div>
             </div>
@@ -103,7 +103,7 @@ export default function Transaction({
             <div className="flex-1 flex flex-col justify-center">
               {(!(steps['swapBeforeBridge'].state === 'failed') && steps['bridge'].state === 'loading') && <Spinner className="animate-spin mx-auto h-7 w-7 text-white" />}
               {steps['bridge'].state === 'completed' && <HiOutlineCheckCircle className="h-6 w-6 mx-auto text-green-600" />}
-              {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed') && <HiOutlineXCircle className="h-6 w-6 mx-auto text-red-600" />}
+              {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed') && <HiOutlineXCircle className="h-7 w-7 mx-auto text-red-600" />}
               {txHashUrl.bridge !== '' && <ViewInExplorerButton url={txHashUrl.bridge} />}
             </div>
           </div>
@@ -124,7 +124,7 @@ export default function Transaction({
               <div className="flex-1 flex flex-col justify-center">
                 {!(steps['swapBeforeBridge'].state === 'failed') && (!(steps['bridge'].state === 'failed') && steps['swapAfterBridge'].state === 'loading') && <Spinner className="animate-spin mx-auto h-7 w-7 text-white" />}
                 {steps['swapAfterBridge'].state === 'completed' && <HiOutlineCheckCircle className="h-6 w-6 mx-auto text-green-600" />}
-                {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed' || steps['swapAfterBridge'].state === 'failed') && <HiOutlineXCircle className="h-6 w-6 mx-auto text-red-600" />}
+                {(steps['swapBeforeBridge'].state === 'failed' || steps['bridge'].state === 'failed' || steps['swapAfterBridge'].state === 'failed') && <HiOutlineXCircle className="h-7 w-7 mx-auto text-red-600" />}
                 {txHashUrl.swapAfterBridge !== '' && <ViewInExplorerButton url={txHashUrl.swapAfterBridge} />}
               </div>
             </div>
