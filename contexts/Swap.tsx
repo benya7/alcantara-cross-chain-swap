@@ -349,14 +349,14 @@ const SwapProvider = ({ children }: Props) => {
   }, [errorSwitchNetwork])
 
   const fetchTokenBalance = useCallback(async (token: BaseToken) => {
-    if (!address) return;
+    if (!address || isLoadingSwitchNetwork) return;
     return await fetchBalance({
       address,
       token: token.address !== '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee' ? token.address as `0x${string}` : undefined,
       chainId: sourceChain.chainId
 
     })
-  }, [address, sourceChain]);
+  }, [address, sourceChain, isLoadingSwitchNetwork]);
 
   const calculateGasPriceInUsd = useCallback(async (chainId: number, gasLimit: string) => {
     const nativeTokenId = getNativeTokenId(chainId.toString());
@@ -666,7 +666,7 @@ const SwapProvider = ({ children }: Props) => {
 
         currentStep = `swap before bridge: ${fromToken.symbol} to ${tokenBridgeSource.symbol}`
         const tx = await sendTransaction(config);
-        await tx.wait(1)
+        await tx.wait(2)
         console.log('swap before bridge hash', tx.hash)
         setTxHashUrl((prev) => ({ ...prev, swapBeforeBridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${tx.hash}` }));
       }
@@ -695,7 +695,7 @@ const SwapProvider = ({ children }: Props) => {
           })
           currentStep = `approve ${tokenBridgeDestination.symbol} for swap`;
           const tx = await sendTransaction(config);
-          await tx.wait()
+          await tx.wait(1)
           console.log('approve hash', tx.hash)
         }
 
@@ -738,7 +738,7 @@ const SwapProvider = ({ children }: Props) => {
 
         currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
         const tx = await sendTransaction(config);
-        await tx.wait()
+        await tx.wait(2)
         console.log('swap after bridge hash', tx.hash)
         setTxHashUrl((prev) => ({ ...prev, swapAfterBridge: `${getExplorerUrl(currentChainId)}/tx/${tx.hash}` }));
 
@@ -748,7 +748,7 @@ const SwapProvider = ({ children }: Props) => {
 
     }
 
-  }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage])
+  }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage, switchNetworkAsync])
 
   const bridge = useCallback(async () => {
     if (!(fixedTransferFee !== '') || !fromToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
@@ -773,7 +773,7 @@ const SwapProvider = ({ children }: Props) => {
       });
 
       const txBridge = await writeContract(configTransfer);
-      await txBridge.wait()
+      await txBridge.wait(2)
       console.log('bridge bridge hash', txBridge.hash)
       currentStep = `await receive ${tokenBridgeDestination.symbol} after bridge`
 
@@ -792,7 +792,7 @@ const SwapProvider = ({ children }: Props) => {
         if (balanceAfterBridge && newBalance.value.gte(balanceAfterBridge.value.add(tokenBridgeAmount.value))) break;
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
-      setTxHashUrl((prev) => ({ ...prev, swapAfterBridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${txBridge.hash}` }));
+      setTxHashUrl((prev) => ({ ...prev, bridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${txBridge.hash}` }));
 
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
