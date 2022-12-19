@@ -372,8 +372,11 @@ const SwapProvider = ({ children }: Props) => {
   }, [apiService])
 
   const fixedTransferFee = useMemo(() => {
+    if (isLoadingSwitchNetwork) {
+      return ''
+    }
     return BigNumber.from(relayerGasFeeInUusdc[sourceChain.name]).add(relayerGasFeeInUusdc[destinationChain.name]).toString()
-  }, [sourceChain, destinationChain])
+  }, [sourceChain, destinationChain, isLoadingSwitchNetwork])
 
   const getQuote = useCallback(async () => {
 
@@ -384,6 +387,7 @@ const SwapProvider = ({ children }: Props) => {
       !fromToken ||
       !toToken ||
       !fromTokenAmount.value.gt(0) ||
+      !(fixedTransferFee !== '') ||
       isLoadingSwitchNetwork ||
       sourceChain === destinationChain ||
       openModalFromToken ||
@@ -399,6 +403,8 @@ const SwapProvider = ({ children }: Props) => {
     const { gasPrice: gasPriceDestination } = await fetchFeeData({ chainId: destinationChain.chainId })
 
     const preset = 'maxReturnResult'
+    setTokenBridgeAmount(processTokenAmount())
+    setToTokenAmount(processTokenAmount())
     setTxCost({ value: txCostValue, state: txCostState });
     const costForTransferBridge = await calculateGasPriceInUsd(sourceChain.chainId, '70000')
     txCostValue = parseFloat(formatUnits(fixedTransferFee, tokenBridgeSource.decimals))
@@ -431,7 +437,6 @@ const SwapProvider = ({ children }: Props) => {
             txCostValue = txCostValue + estimatedGasRes2
             txCostState = 'done'
             setTxCost({ value: txCostValue, state: txCostState })
-
             setTokenBridgeAmount(processTokenAmount(BigNumber.from(res1.bestResult.toTokenAmount), tokenBridgeSource.decimals))
             setToTokenAmount(processTokenAmount(BigNumber.from(res2.bestResult.toTokenAmount), toToken.decimals))
           } catch (err: any) {
@@ -469,8 +474,7 @@ const SwapProvider = ({ children }: Props) => {
           txCostValue = txCostValue + estimatedGasRes
           txCostState = 'done'
           setTxCost({ value: txCostValue, state: txCostState })
-
-          setTokenBridgeAmount(processTokenAmount(BigNumber.from(res.bestResult.toTokenAmount), toToken.decimals))
+          setTokenBridgeAmount(fromTokenAmount)
           setToTokenAmount(processTokenAmount(BigNumber.from(res.bestResult.toTokenAmount), toToken.decimals))
         } catch (err: any) {
           setNotification({ title: 'getQuote', description: err.data?.reason ?? err.data?.description ?? null, type: 'error' })
@@ -508,7 +512,7 @@ const SwapProvider = ({ children }: Props) => {
 
   // fetch tokenBridge balance and calculate if sufficient for pay transfer fee
   useEffect(() => {
-    if (!tokenBridgeAmount.value.gt(0)) return;
+    if (!(fixedTransferFee !== '') || !tokenBridgeAmount.value.gt(0)) return;
 
     fetchTokenBalance(tokenBridgeSource).then((res) => {
       const tokenBridgeBalanceAfterSwap = res?.value.add(tokenBridgeAmount.value);
@@ -518,7 +522,7 @@ const SwapProvider = ({ children }: Props) => {
   }, [tokenBridgeAmount, tokenBridgeSource, fixedTransferFee]);
 
   const insufficientBalance = useMemo(() => {
-    if (!fromTokenAmount.value.gt(0) || !tokenBridgeAmount.value.gt(0) || !fromToken) return true;
+    if (!(fixedTransferFee !== '') || !fromTokenAmount.value.gt(0) || !tokenBridgeAmount.value.gt(0) || !fromToken) return true;
 
     if (insufficientTokenBridge) {
       const ratio = fromTokenAmount.float / tokenBridgeAmount.float
@@ -591,7 +595,7 @@ const SwapProvider = ({ children }: Props) => {
   };
 
   const swapBeforeBridge = useCallback(async () => {
-    if (!sourceChain || !fromToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
+    if (!(fixedTransferFee !== '') || !sourceChain || !fromToken || !address ) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
     let currentStep = `swap before bridge: ${fromToken.symbol} to ${tokenBridgeSource.symbol}`
     try {
       if (fromToken.symbol !== tokenBridgeSource.symbol) {
@@ -747,7 +751,7 @@ const SwapProvider = ({ children }: Props) => {
   }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage])
 
   const bridge = useCallback(async () => {
-    if (!fromToken || !address) return;
+    if (!(fixedTransferFee !== '') || !fromToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
     let currentStep = 'bridge';
     const assetDenom = 'uusdc';
     try {
