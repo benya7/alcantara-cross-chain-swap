@@ -22,7 +22,7 @@ import { useModal } from "../hooks/useModal";
 import paginateTokensList from "../utils/paginateTokensList";
 import ERC20 from '../contracts/interfaces/IERC20.sol/IERC20.json';
 import { BigNumber, constants } from "ethers";
-import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData, fetchBalance, readContract } from "@wagmi/core";
+import { prepareSendTransaction, prepareWriteContract, sendTransaction, writeContract, fetchFeeData, fetchBalance, readContract, getProvider } from "@wagmi/core";
 import Error from "next/error";
 import { useNotification } from "./Notification";
 import getGasCost from "../utils/getGasCost";
@@ -140,6 +140,9 @@ const SwapProvider = ({ children }: Props) => {
     bridge: '',
     swapAfterBridge: ''
   });
+
+
+ 
 
   const incrementPageFromTokensList = () => {
     setPageFromToken((prev) => prev + 1);
@@ -294,6 +297,27 @@ const SwapProvider = ({ children }: Props) => {
   const setSelectedDestinationChain = (newValue: AxelarChain) => {
     destinationChainsRef.current?.selectOption({ label: newValue.name, value: newValue.chainId, image: newValue.image })
   };
+
+
+  // const testSwitchChainAync = useCallback(async () => {
+  //   switchNetworkAsync?.(43114).then(async (res) => {
+  //     const currentChainId = res.id;
+  //     const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, tokenBridgeAmount.formated);
+
+  //     const config = await prepareSendTransaction({
+  //       request: {
+  //         to: approveCallData.to,
+  //         data: approveCallData.data,
+  //         value: approveCallData.value,
+  //       }
+  //     })
+  //     console.log(config)
+  //     const tx = await sendTransaction({...config, chainId: currentChainId});
+  //     tx.wait()
+  //     console.log(tx.hash)
+  //   }).catch((err) => console.log('async switch err', err))
+
+  // }, [switchNetworkAsync, tokenBridgeDestination, tokenBridgeAmount])
 
   useEffect(() => {
     const selectedSourceChain = Object.values(chainsDetailsData).find((x) => x.chainId === (chain?.id ?? 1));
@@ -598,7 +622,7 @@ const SwapProvider = ({ children }: Props) => {
   };
 
   const swapBeforeBridge = useCallback(async () => {
-    if (!(fixedTransferFee !== '') || !sourceChain || !fromToken || !address ) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
+    if (!(fixedTransferFee !== '') || !sourceChain || !fromToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
     let currentStep = `swap before bridge: ${fromToken.symbol} to ${tokenBridgeSource.symbol}`
     try {
       if (fromToken.symbol !== tokenBridgeSource.symbol) {
@@ -617,7 +641,7 @@ const SwapProvider = ({ children }: Props) => {
 
         if (needApprove) {
           const approveCallData = await getApproveCallData(sourceChain.chainId, fromToken, fromTokenAmountParsed);
-          const config = await prepareSendTransaction({
+          const approveConfig = await prepareSendTransaction({
             request: {
               to: approveCallData.to,
               data: approveCallData.data,
@@ -625,9 +649,9 @@ const SwapProvider = ({ children }: Props) => {
             }
           })
           currentStep = `approve ${fromToken.symbol} for swap`;
-          const tx = await sendTransaction(config);
-          await tx.wait()
-          console.log('approve hash', tx.hash)
+          const approveTx = await sendTransaction(approveConfig);
+          await approveTx.wait()
+          console.log('approve hash', approveTx.hash)
         }
 
         const { gasPrice } = await fetchFeeData({ chainId: sourceChain.chainId })
@@ -657,7 +681,7 @@ const SwapProvider = ({ children }: Props) => {
         });
         const spender = await apiService.getSpenderAddress(sourceChain.chainId)
 
-        const config = await prepareSendTransaction({
+        const swapConfig = await prepareSendTransaction({
           request: {
             data: swapCallData.data,
             from: address,
@@ -668,27 +692,27 @@ const SwapProvider = ({ children }: Props) => {
         })
 
         currentStep = `swap before bridge: ${fromToken.symbol} to ${tokenBridgeSource.symbol}`
-        const tx = await sendTransaction(config);
-        await tx.wait(2)
-        console.log('swap before bridge hash', tx.hash)
-        setTxHashUrl((prev) => ({ ...prev, swapBeforeBridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${tx.hash}` }));
+        const swapTx = await sendTransaction(swapConfig);
+        await swapTx.wait(2)
+        console.log('swap before bridge hash', swapTx.hash)
+        setTxHashUrl((prev) => ({ ...prev, swapBeforeBridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${swapTx.hash}` }));
       }
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'swapBeforeBridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
     }
 
-  }, [sourceChain, fromToken, fromTokenAmount, tokenBridgeAmount, address, slippage, tokenBridgeSource, fixedTransferFee])
+  }, [sourceChain, fromToken, fromTokenAmount, tokenBridgeAmount, address, slippage, tokenBridgeSource, fixedTransferFee, needApproveforSwap])
 
   const swapAfterBridge = useCallback(async () => {
     if (!sourceChain || !tokenBridgeAmount || !address || !toToken || !destinationChain || !switchNetworkAsync) throw new Error<{ reason: string }>({ reason: 'missing params', statusCode: 1 });
     let currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
     try {
       if (toToken.symbol !== tokenBridgeDestination.symbol) {
-        const {id: currentChainId} = await switchNetworkAsync(destinationChain.chainId)
+        const { id: currentChainId } = await switchNetworkAsync(destinationChain.chainId)
         const needApprove = await needApproveforSwap(currentChainId, tokenBridgeDestination, tokenBridgeAmount.float);
         if (needApprove) {
           const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, tokenBridgeAmount.formated);
-          const config = await prepareSendTransaction({
+          const approveConfig = await prepareSendTransaction({
             request: {
               to: approveCallData.to,
               data: approveCallData.data,
@@ -696,9 +720,9 @@ const SwapProvider = ({ children }: Props) => {
             }
           })
           currentStep = `approve ${tokenBridgeDestination.symbol} for swap`;
-          const tx = await sendTransaction(config);
-          await tx.wait(1)
-          console.log('approve hash', tx.hash)
+          const approveTx = await sendTransaction(approveConfig);
+          await approveTx.wait(1)
+          console.log('approve hash', approveTx.hash)
         }
 
         const { gasPrice } = await fetchFeeData({ chainId: currentChainId })
@@ -728,7 +752,7 @@ const SwapProvider = ({ children }: Props) => {
         });
         const spender = await apiService.getSpenderAddress(currentChainId)
 
-        const config = await prepareSendTransaction({
+        const swapConfig = await prepareSendTransaction({
           request: {
             data: swapCallData.data,
             from: address,
@@ -739,10 +763,10 @@ const SwapProvider = ({ children }: Props) => {
         })
 
         currentStep = `swap after bridge: ${tokenBridgeDestination.symbol} to ${toToken.symbol}`
-        const tx = await sendTransaction(config);
-        await tx.wait(2)
-        console.log('swap after bridge hash', tx.hash)
-        setTxHashUrl((prev) => ({ ...prev, swapAfterBridge: `${getExplorerUrl(currentChainId)}/tx/${tx.hash}` }));
+        const swapTx = await sendTransaction(swapConfig);
+        await swapTx.wait(2)
+        console.log('swap after bridge hash', swapTx.hash)
+        setTxHashUrl((prev) => ({ ...prev, swapAfterBridge: `${getExplorerUrl(currentChainId)}/tx/${swapTx.hash}` }));
 
       }
     } catch (err: any) {
@@ -750,7 +774,7 @@ const SwapProvider = ({ children }: Props) => {
 
     }
 
-  }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage, switchNetworkAsync])
+  }, [sourceChain, destinationChain, tokenBridgeAmount, address, toToken, slippage, switchNetworkAsync, needApproveforSwap])
 
   const bridge = useCallback(async () => {
     if (!(fixedTransferFee !== '') || !fromToken || !address) throw new Error<{ reason: string }>({ reason: 'missin params', statusCode: 1 });
@@ -764,6 +788,10 @@ const SwapProvider = ({ children }: Props) => {
         address,
         assetDenom
       );
+      console.log('before depositAddress')
+      console.log('tokenBridgeAmount', tokenBridgeAmount.value.toString())
+      console.log('(fixedTransferFee)', fixedTransferFee)
+      console.log('tokenBridgeAmount.value.add(fixedTransferFee)', tokenBridgeAmount.value.add(fixedTransferFee).toString())
       const configTransfer = await prepareWriteContract({
         address: tokenBridgeSource.address,
         abi: ERC20.abi,
@@ -774,9 +802,9 @@ const SwapProvider = ({ children }: Props) => {
         ],
       });
 
-      const txBridge = await writeContract(configTransfer);
-      await txBridge.wait(2)
-      console.log('bridge bridge hash', txBridge.hash)
+      const transferTx = await writeContract(configTransfer);
+      await transferTx.wait(2)
+      console.log('bridge bridge hash', transferTx.hash)
       currentStep = `await receive ${tokenBridgeDestination.symbol} after bridge`
 
       const balanceAfterBridge = await fetchBalance({
@@ -794,7 +822,7 @@ const SwapProvider = ({ children }: Props) => {
         if (balanceAfterBridge && newBalance.value.gte(balanceAfterBridge.value.add(tokenBridgeAmount.value))) break;
         await new Promise((resolve) => setTimeout(resolve, 5000));
       }
-      setTxHashUrl((prev) => ({ ...prev, bridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${txBridge.hash}` }));
+      setTxHashUrl((prev) => ({ ...prev, bridge: `${getExplorerUrl(sourceChain.chainId)}/tx/${transferTx.hash}` }));
 
     } catch (err: any) {
       throw new Error<TransactionError>({ step: 'bridge', reason: err.data?.reason ?? err.data?.description ?? err.message ?? currentStep, statusCode: 1 });
