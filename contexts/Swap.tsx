@@ -141,9 +141,6 @@ const SwapProvider = ({ children }: Props) => {
     swapAfterBridge: ''
   });
 
-
- 
-
   const incrementPageFromTokensList = () => {
     setPageFromToken((prev) => prev + 1);
   };
@@ -297,27 +294,6 @@ const SwapProvider = ({ children }: Props) => {
   const setSelectedDestinationChain = (newValue: AxelarChain) => {
     destinationChainsRef.current?.selectOption({ label: newValue.name, value: newValue.chainId, image: newValue.image })
   };
-
-
-  // const testSwitchChainAync = useCallback(async () => {
-  //   switchNetworkAsync?.(43114).then(async (res) => {
-  //     const currentChainId = res.id;
-  //     const approveCallData = await getApproveCallData(currentChainId, tokenBridgeDestination, tokenBridgeAmount.formated);
-
-  //     const config = await prepareSendTransaction({
-  //       request: {
-  //         to: approveCallData.to,
-  //         data: approveCallData.data,
-  //         value: approveCallData.value,
-  //       }
-  //     })
-  //     console.log(config)
-  //     const tx = await sendTransaction({...config, chainId: currentChainId});
-  //     tx.wait()
-  //     console.log(tx.hash)
-  //   }).catch((err) => console.log('async switch err', err))
-
-  // }, [switchNetworkAsync, tokenBridgeDestination, tokenBridgeAmount])
 
   useEffect(() => {
     const selectedSourceChain = Object.values(chainsDetailsData).find((x) => x.chainId === (chain?.id ?? 1));
@@ -531,13 +507,13 @@ const SwapProvider = ({ children }: Props) => {
     openModalTransaction,
     fixedTransferFee
   ]);
-  // fetch fromToken balance
+
   useEffect(() => {
     if (!fromToken) return;
     fetchTokenBalance(fromToken).then(res => setFromTokenBalance(processTokenAmount(res?.value, fromToken.decimals)))
   }, [fetchTokenBalance, fromToken])
 
-  // fetch tokenBridge balance and calculate if sufficient for pay transfer fee
+  
   useEffect(() => {
     if (!(fixedTransferFee !== '') || !tokenBridgeAmount.value.gt(0)) return;
 
@@ -788,10 +764,7 @@ const SwapProvider = ({ children }: Props) => {
         address,
         assetDenom
       );
-      console.log('before depositAddress')
-      console.log('tokenBridgeAmount', tokenBridgeAmount.value.toString())
-      console.log('(fixedTransferFee)', fixedTransferFee)
-      console.log('tokenBridgeAmount.value.add(fixedTransferFee)', tokenBridgeAmount.value.add(fixedTransferFee).toString())
+
       const configTransfer = await prepareWriteContract({
         address: tokenBridgeSource.address,
         abi: ERC20.abi,
